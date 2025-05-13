@@ -58,13 +58,13 @@ export async function GET(request: NextRequest) {
                     resp = await axios.get(tileUrl);
                 } catch (error) {
                     console.error('Error fetching tile data:', error);
-                    return { year: year.toString(), score: 0 };
+                    return { year: year.toString(), score: 0.01 };
                 }
                 console.log('resp:', resp.data);
                 const features = resp.data.features;
 
                 if (!features || features.length === 0) {
-                    return { year: year.toString(), score: 0 };
+                    return { year: year.toString(), score: 0.01 };
                 }
 
                 let nearest = features[0];
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
 
                 return {
                     year: year.toString(),
-                    score: typeof nearest.properties.score === 'number' ? nearest.properties.score : 0
+                    score: typeof nearest.properties.score === 'number' ? nearest.properties.score : 0.01
                 };
             })
         );

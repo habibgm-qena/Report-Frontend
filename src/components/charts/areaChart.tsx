@@ -68,11 +68,6 @@ const AreaChartComponent: React.FC = () => {
     const [ymax, setYmax] = useState(1);
     const [ymin, setYmin] = useState(-1);
 
-    // useEffect(() => {
-    //     const timer = setTimeout(() => setLoading(false), 10000); // 10 seconds
-    //     return () => clearTimeout(timer);
-    // }, []);
-
     const nvdiScores = useGenericMethod({
         method: 'GET',
         apiMethod: scoreChartScore,
@@ -116,7 +111,7 @@ const AreaChartComponent: React.FC = () => {
             <ResponsiveContainer width='100%' height='100%'>
                 <AreaChart data={chartData} margin={{ top: 10, right: -20, left: 20, bottom: 20 }}>
                     <defs>
-                        <linearGradient id='areaGradient' x1='0' y1={-1} x2='0' y2={1}>
+                        <linearGradient id='areaGradient' x1='0' y1='1' x2='0' y2='0' gradientUnits='objectBoundingBox'>
                             <stop offset='0%' stopColor='rgba(216, 238, 16, 0.22)' />
                             <stop offset='75%' stopColor='rgba(234, 238, 16, 0.07)' />
                             <stop offset='81%' stopColor='rgba(255, 56, 56, 0.05)' />
@@ -150,6 +145,8 @@ const AreaChartComponent: React.FC = () => {
                         fill='url(#areaGradient)'
                         dot={<CustomDot />}
                         yAxisId='right'
+                        baseValue={ymin}
+                        animationEasing='linear'
                     />
                 </AreaChart>
             </ResponsiveContainer>

@@ -1,8 +1,11 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
+import { agriRecommend } from '@/app/api/endpoints/creditScoring/creditScoring';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { useLocation } from '@/hooks/location_context';
+import { useGenericMethod } from '@/hooks/useGenericMethod';
 
 import AreaChartComponent from '../charts/areaChart';
 import './scoringSheet.scss';
@@ -29,6 +32,42 @@ const CreditScoreDrawer: React.FC<CreditScoreDrawerProps> = ({ isOpen, onOpenCha
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const sheetContentRef = useRef<HTMLDivElement>(null!);
     const sheetTitleRef = useRef<HTMLDivElement>(null!);
+    const [rCrops, setrCrops] = useState<any>([]);
+    const [rFertilizers, setrFertilizers] = useState<any>([]);
+    const [nvdiScoresdata, setNvdiScoresdata] = useState<any>([]);
+    const years = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024];
+    const [loading, setLoading] = useState<boolean>(true);
+    const { lat, lng } = useLocation();
+
+    const nvdiScores = useGenericMethod({
+        method: 'GET',
+        apiMethod: agriRecommend,
+        skipWithOutParams: true,
+        onSuccess: (data) => {
+            console.log('Data fetched successfully:', data);
+            setrFertilizers(data.recommended_fertilizers);
+            setrCrops(data.recommended_crops);
+            setNvdiScoresdata(
+                data.ndvi_score_list.map((item: any, index: number) => ({
+                    year: years[index],
+                    score: item
+                }))
+            );
+            setLoading(false);
+        },
+        onError: (error) => {
+            setLoading(false);
+            console.error('Error fetching data:', error);
+        }
+    });
+
+    useEffect(() => {
+        if (lat && lng) {
+            nvdiScores.handleAction({
+                crop_location: { latitude: lat, longitude: lng }
+            });
+        }
+    }, [lat, lng]);
 
     return (
         <div className='w-screen'>
@@ -64,25 +103,24 @@ const CreditScoreDrawer: React.FC<CreditScoreDrawerProps> = ({ isOpen, onOpenCha
                             <div className='mx-10 mt-7'>
                                 <div className='mb-2 flex items-center gap-2 text-orange-500'>
                                     <LightbulbIcon className='size-5' aria-hidden='true' />
-                                    <h3 className='font-semibold'>Score Tip</h3>
+                                    <h3 className='font-semibold'>Crop Recommendations</h3>
                                 </div>
                                 <ul className='list-disc space-y-2 pl-10 text-sm'>
-                                    <li>The Nano Loan is a financing solution</li>
-                                    <li>Specifically designed to meet the short-term working</li>
-                                    <li>Capital needs of small and medium-sized enterprises (SMEs)</li>
-                                    <li>Short-term working capital needs of SMEs</li>
+                                    {rCrops.map((crop: any, index: number) => (
+                                        <li key={index} className='text-[15px] font-thin'>
+                                            {crop}
+                                        </li>
+                                    ))}
                                 </ul>
                             </div>
 
                             <div className='mx-10 mt-10 text-[21px]'>
-                                <h3 className='font-semibold'>Key Factors</h3>
-                                <p className='pb-2 text-[13.5px]'>Affecting your score</p>
+                                <h3 className='font-semibold'>Fertilizer Recommendations</h3>
                                 <hr className='mb-4' />
                                 <div className='space-y-4'>
-                                    {keyFactors.map((factor, index) => (
+                                    {rFertilizers.map((factor: any, index: number) => (
                                         <div key={index} className='flex justify-between'>
-                                            <span className='text-[17px] font-thin'>{factor.label}</span>
-                                            <span className='text-[17px] font-thin'>{factor.value}</span>
+                                            <span className='text-[17px] font-thin'>{factor}</span>
                                         </div>
                                     ))}
                                 </div>
