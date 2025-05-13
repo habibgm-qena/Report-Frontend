@@ -1,8 +1,8 @@
 import cpClient from '@/utils/cpClient';
 
-export const makeCreditScore = (data: any) =>
+export const scoreChartScore = (params: any) =>
     cpClient({
-        method: 'post',
-        url: `api/v1/credit-scoring/score-credit/`,
-        data
+        method: 'get',
+        url: `api/chartdata`,
+        params
     });

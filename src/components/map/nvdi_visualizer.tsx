@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import dynamic from 'next/dynamic';
 
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
+import { useLocation } from '@/hooks/location_context';
 
 import CreditScoreDrawer from '../scoringSheet/scoringSheet';
 import ColorScaleRuler from './colorRuler';
@@ -59,7 +60,14 @@ function YearSlider({
 
 export default function MapGrid() {
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const { lat, lng } = useLocation();
     const [isOpen, setIsOpen] = useState(false);
+
+    useEffect(() => {
+        if (lat && lng) {
+            setIsOpen(true);
+        }
+    }, [lat, lng]);
 
     return (
         <div className='relative h-screen w-screen overflow-hidden'>
@@ -100,26 +108,6 @@ export default function MapGrid() {
                     <span className='sr-only'>Open menu</span>
                 </Button>
 
-                {/* <Sheet>
-                    <SheetTrigger asChild>
-                        <Button
-                            variant='ghost'
-                            size='icon'
-                            className='rounded-full bg-white/90 shadow-md hover:bg-white'>
-                            <Menu className='h-5 w-5' />
-                            <span className='sr-only'>Open menu</span>
-                        </Button>
-                    </SheetTrigger>
-                    <SheetContent side='right'>
-                        <SheetHeader>
-                            <SheetTitle>GeoExplorer</SheetTitle>
-                            <SheetDescription>Explore NDVI data from 2017 to 2023</SheetDescription>
-                        </SheetHeader>
-                        <div className='py-6'>
-                            <YearSlider maps={maps} selectedIndex={selectedIndex} onChange={setSelectedIndex} />
-                        </div>
-                    </SheetContent>
-                </Sheet> */}
                 <CreditScoreDrawer isOpen={isOpen} onOpenChange={(open) => setIsOpen(open)} />
             </div>
 

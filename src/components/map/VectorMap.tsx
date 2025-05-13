@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 
-import L from 'leaflet';
+import { useLocation } from '@/hooks/location_context';
+
+import L, { latLng } from 'leaflet';
 import 'leaflet.vectorgrid/dist/Leaflet.VectorGrid.bundled.js';
 import 'leaflet/dist/leaflet.css';
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
@@ -64,8 +66,11 @@ function VectorTileLayer({ url }: { url: string }) {
 }
 
 function ClickHandler({ onClick }: { onClick: (latlng: L.LatLng) => void }) {
+    const { lat, lng, setLat, setLng } = useLocation();
     useMapEvents({
         click(e: any) {
+            setLat(e.latlng.lat);
+            setLng(e.latlng.lng);
             onClick(e.latlng);
         }
     });
