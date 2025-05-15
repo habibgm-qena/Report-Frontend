@@ -23,7 +23,7 @@ L.Icon.Default.mergeOptions({
 });
 
 const DEFAULT_CENTER: [number, number] = [9.145, 40.489673];
-const DEFAULT_ZOOM = 5;
+const DEFAULT_ZOOM = 6;
 
 function VectorTileLayer({ url }: { url: string }) {
     const map = useMap();
