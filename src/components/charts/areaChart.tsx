@@ -39,7 +39,8 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => {
     if (active && payload && payload.length > 0) {
         return (
             <div className='rounded-md bg-zinc-800/90 px-3 py-1.5 text-xs text-white shadow-sm'>
-                Evaluated score: {payload[0].value}
+                Evaluated quantile score: {payload[1].value} <br />
+                Evaluated average score: {payload[0].value}
             </div>
         );
     }
@@ -61,42 +62,62 @@ const CustomDot: React.FC<CustomDotProps> = ({ cx, cy, payload }) => {
     return null;
 };
 
-const AreaChartComponent: React.FC = () => {
+const AreaChartComponent: React.FC<{ nvdiScoresdata: any; nvdi75Scoredata: any }> = ({
+    nvdiScoresdata,
+    nvdi75Scoredata
+}) => {
     const [loading, setLoading] = useState(true);
     const { lat, lng, setLat, setLng } = useLocation();
     const [chartData, setChartData] = useState<DataPoint[]>([]);
     const [ymax, setYmax] = useState(1);
     const [ymin, setYmin] = useState(-1);
+    const [nvdiScores, setNvdiScores] = useState([]);
 
-    const nvdiScores = useGenericMethod({
-        method: 'GET',
-        apiMethod: scoreChartScore,
-        skipWithOutParams: true,
-        onSuccess: (data) => {
-            console.log('Data fetched successfully:', data);
-            const formattedData = data.map((item: any) => ({
-                year: item.year,
-                score: item.score
-            }));
-            setChartData(formattedData);
-            setYmax(Math.max(...formattedData.map((item: any) => item.score)) + 0.2);
-            setYmin(Math.min(...formattedData.map((item: any) => item.score)) - 0.2);
-            setLoading(false);
-        },
-        onError: (error) => {
-            setLoading(false);
-            console.error('Error fetching data:', error);
-        }
-    });
+    // const nvdiScores = useGenericMethod({
+    //     method: 'GET',
+    //     apiMethod: scoreChartScore,
+    //     skipWithOutParams: true,
+    //     onSuccess: (data) => {
+    //         console.log('Data fetched successfully:', data);
+    //         const formattedData = data.map((item: any) => ({
+    //             year: item.year,
+    //             score: item.score
+    //         }));
+    //         setChartData(formattedData);
+    //         setYmax(Math.max(...formattedData.map((item: any) => item.score)) + 0.2);
+    //         setYmin(Math.min(...formattedData.map((item: any) => item.score)) - 0.2);
+    //         setLoading(false);
+    //     },
+    //     onError: (error) => {
+    //         setLoading(false);
+    //         console.error('Error fetching data:', error);
+    //     }
+    // });
+
+    // useEffect(() => {
+    //     if (lat && lng) {
+    //         nvdiScores.handleAction({
+    //             lat: lat,
+    //             lng: lng
+    //         });
+    //     }
+    // }, [lat, lng]);
 
     useEffect(() => {
-        if (lat && lng) {
-            nvdiScores.handleAction({
-                lat: lat,
-                lng: lng
-            });
+        console.log('nvdiScoresdata', nvdiScoresdata);
+        if (nvdiScoresdata) {
+            // setNvdiScores(nvdiScoresdata);
+            const formattedData = nvdiScoresdata.map((item: any, index: number) => ({
+                year: item.year,
+                score: item.score,
+                score75: nvdi75Scoredata[index]?.score || 0
+            }));
+            setChartData(formattedData);
+            setYmax(Math.max(...nvdiScoresdata.map((item: any) => item.score)) + 2);
+            setYmin(Math.min(...nvdiScoresdata.map((item: any) => item.score)) - 2);
+            setLoading(false);
         }
-    }, [lat, lng]);
+    }, [nvdiScoresdata]);
 
     if (loading) {
         return (
@@ -141,6 +162,17 @@ const AreaChartComponent: React.FC = () => {
                         type='monotone'
                         dataKey='score'
                         stroke='#374151'
+                        strokeWidth={1.5}
+                        fill='url(#areaGradient)'
+                        dot={<CustomDot />}
+                        yAxisId='right'
+                        baseValue={ymin}
+                        animationEasing='linear'
+                    />
+                    <Area
+                        type='monotone'
+                        dataKey='score75'
+                        stroke='#af760b'
                         strokeWidth={1.5}
                         fill='url(#areaGradient)'
                         dot={<CustomDot />}

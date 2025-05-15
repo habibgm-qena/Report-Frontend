@@ -5,7 +5,7 @@ const createCpClient = () => {
 
     const client = Axios.create({
         baseURL,
-        timeout: 30000
+        timeout: 900000
         // withCredentials: true,
     });
 
