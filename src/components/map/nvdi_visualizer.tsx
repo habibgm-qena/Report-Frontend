@@ -26,13 +26,13 @@ const VectorMap = dynamic(() => import('./VectorMap'), { ssr: false });
 type MapItem = { title: string; url: string };
 
 const maps: MapItem[] = [
-    { title: '2017 NDVI', url: 'https://nvdi-index-mtiles.onrender.com/data/2017/{z}/{x}/{y}.pbf' },
-    { title: '2018 NDVI', url: 'https://nvdi-index-mtiles.onrender.com/data/2018/{z}/{x}/{y}.pbf' },
-    { title: '2019 NDVI', url: 'https://nvdi-index-mtiles.onrender.com/data/2019/{z}/{x}/{y}.pbf' },
-    { title: '2020 NDVI', url: 'https://nvdi-index-mtiles.onrender.com/data/2020/{z}/{x}/{y}.pbf' },
-    { title: '2021 NDVI', url: 'https://nvdi-index-mtiles.onrender.com/data/2021/{z}/{x}/{y}.pbf' },
-    { title: '2022 NDVI', url: 'https://nvdi-index-mtiles.onrender.com/data/2022/{z}/{x}/{y}.pbf' },
-    { title: '2023 NDVI', url: 'https://nvdi-index-mtiles.onrender.com/data/2023/{z}/{x}/{y}.pbf' }
+    { title: '2017', url: 'https://nvdi-index-mtiles.onrender.com/data/2017/{z}/{x}/{y}.pbf' },
+    { title: '2018', url: 'https://nvdi-index-mtiles.onrender.com/data/2018/{z}/{x}/{y}.pbf' },
+    { title: '2019', url: 'https://nvdi-index-mtiles.onrender.com/data/2019/{z}/{x}/{y}.pbf' },
+    { title: '2020', url: 'https://nvdi-index-mtiles.onrender.com/data/2020/{z}/{x}/{y}.pbf' },
+    { title: '2021', url: 'https://nvdi-index-mtiles.onrender.com/data/2021/{z}/{x}/{y}.pbf' },
+    { title: '2022', url: 'https://nvdi-index-mtiles.onrender.com/data/2022/{z}/{x}/{y}.pbf' },
+    { title: '2023', url: 'https://nvdi-index-mtiles.onrender.com/data/2023/{z}/{x}/{y}.pbf' }
 ];
 
 function YearSlider({
@@ -46,7 +46,7 @@ function YearSlider({
 }) {
     return (
         <div className='flex w-full flex-col space-y-2'>
-            <span className='text-sm font-medium'>{maps[selectedIndex].title}</span>
+            <span className='text-md font-bold'>{maps[selectedIndex].title}</span>
             <Slider
                 defaultValue={[selectedIndex]}
                 max={maps.length - 1}
@@ -112,7 +112,7 @@ export default function MapGrid() {
             </div>
 
             {/* Year Slider Overlay at Bottom */}
-            <div className='absolute bottom-6 left-1/2 z-1000 w-80 -translate-x-1/2 transform rounded-lg bg-white/90 p-4 shadow-md'>
+            <div className='absolute top-6 left-1/2 z-1000 w-80 -translate-x-1/2 transform rounded-lg bg-white/90 p-4 shadow-md'>
                 <YearSlider maps={maps} selectedIndex={selectedIndex} onChange={setSelectedIndex} />
             </div>
         </div>
