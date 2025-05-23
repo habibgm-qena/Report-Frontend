@@ -9,6 +9,7 @@ interface FileTreeItemProps {
     node: TreeNode;
     isExpanded: boolean;
     isOpen: boolean;
+    isSelected: boolean;
     isLoading: boolean;
     userRole: 'admin' | 'user';
     onAddItem: (parentId: string, type: 'file' | 'folder') => void;
@@ -17,7 +18,7 @@ interface FileTreeItemProps {
     onRefresh?: (id: string) => void;
     onSelect?: (id: string) => void;
     onToggle?: (id: string) => void;
-    onOpenFolder?: (id: string) => void;
+    onOpenFolder?: (id: string, asRoot?: boolean) => void;
     children?: React.ReactNode;
 }
 
@@ -25,6 +26,7 @@ export function FileTreeItem({
     node,
     isExpanded,
     isOpen,
+    isSelected,
     isLoading,
     userRole,
     onAddItem,
@@ -38,9 +40,12 @@ export function FileTreeItem({
 }: FileTreeItemProps) {
     const handleClick = (event: React.MouseEvent) => {
         event.stopPropagation();
-        if (onSelect && onToggle) {
-            onSelect(node.id);
+        if (onToggle) {
             onToggle(node.id);
+        }
+        if (onSelect && onOpenFolder) {
+            onSelect(node.id);
+            onOpenFolder(node.id, false);
         }
     };
 
@@ -55,7 +60,8 @@ export function FileTreeItem({
         <div
             className={cn(
                 'flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-accent',
-                'cursor-pointer select-none'
+                'cursor-pointer select-none',
+                isSelected && 'bg-accent/50 text-accent-foreground'
             )}
             onClick={handleClick}
         >
@@ -69,13 +75,16 @@ export function FileTreeItem({
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     )}
                 </div>
-                {isOpen ? (
+                {isSelected ? (
                     <FolderOpen className="h-4 w-4 text-blue-500" />
                 ) : (
-                    <Folder className="h-4 w-4 text-blue-500" />
+                    <Folder className="h-4 w-4 text-muted-foreground" />
                 )}
             </div>
-            <span className="text-sm">{node.name}</span>
+            <span className={cn(
+                "text-sm",
+                isSelected && "font-medium"
+            )}>{node.name}</span>
         </div>
     );
 
@@ -86,7 +95,7 @@ export function FileTreeItem({
             onRename={onRename}
             onDelete={onDelete}
             onRefresh={onRefresh}
-            onOpenFolder={onOpenFolder}
+            onOpenFolder={(id) => onOpenFolder?.(id, true)}
             userRole={userRole}
         >
             <div role="treeitem" className="relative">
