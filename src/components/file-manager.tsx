@@ -25,18 +25,22 @@ import {
     fileManagerAtom,
     selectedFolderAtom,
     breadcrumbsAtom,
+    treeActionsAtom,
+    TreeNode
 } from '@/store/fileManager';
 
 interface FileManagerProps {
     userRole: 'admin' | 'user';
 }
 
-type FileSystemItem = FileType | FolderType;
+type FileSystemItem = FileType | TreeNode;
 
 export function FileManager({ userRole }: FileManagerProps) {
     const [state, setState] = useAtom(fileManagerAtom);
-    const [selectedFolder, setSelectedFolder] = useAtom(selectedFolderAtom);
-    const [breadcrumbs, setBreadcrumbs] = useAtom(breadcrumbsAtom);
+    const [, setSelectedFolder] = useAtom(selectedFolderAtom);
+    const [, setBreadcrumbs] = useAtom(breadcrumbsAtom);
+    const [, dispatch] = useAtom(treeActionsAtom);
+    const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
 
     const [isAddFileDialogOpen, setIsAddFileDialogOpen] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -44,6 +48,7 @@ export function FileManager({ userRole }: FileManagerProps) {
     const [newFileName, setNewFileName] = useState('');
     const [newFileSQL, setNewFileSQL] = useState('');
     const [isEditMode, setIsEditMode] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
     // Generic method hooks
     const { data: rootFolder, loading: loadingRoot, handleAction: fetchRoot } = useGenericMethod({
@@ -88,92 +93,129 @@ export function FileManager({ userRole }: FileManagerProps) {
         }
     });
 
-    // Initial load
-    useEffect(() => {
-        fetchRoot();
-    }, []);
-
-    // Update selected folder when currentFolder changes
-    useEffect(() => {
-        if (currentFolder) {
-            setSelectedFolder(currentFolder);
-            setState(prev => ({ ...prev, selected: currentFolder.id }));
-            const buildBreadcrumbs = async (folder: FolderType) => {
-                const path = [];
-                let current: FolderType | null = folder;
-                while (current) {
-                    path.unshift({ id: current.id, name: current.name });
-                    if (current.parentId && current.parentId !== 'root') {
-                        const response = await getFolderContents({ id: current.parentId });
-                        current = response.data;
-                    } else {
-                        current = null;
-                    }
-                }
-                if (path[0]?.id !== 'root') {
-                    path.unshift({ id: 'root', name: 'Root' });
-                }
-                setBreadcrumbs(path);
-            };
-            buildBreadcrumbs(currentFolder);
-            if (currentFolder.id !== 'root') {
-                setState(prev => ({
-                    ...prev,
-                    expandedFolders: {
-                        ...prev.expandedFolders,
-                        [currentFolder.id]: currentFolder
-                    }
-                }));
+    const refreshCurrentFolder = async () => {
+        if (state.selectedFolder) {
+            try {
+                const response = await getFolderContents({ id: state.selectedFolder.id });
+                const folder = response.data;
+                setState(prev => {
+                    const newFolderTree = { ...prev.treeData };
+                    newFolderTree[folder.id] = {
+                        ...folder,
+                        children: folder.children || []
+                    };
+                    return {
+                        ...prev,
+                        treeData: newFolderTree,
+                        selectedFolder: folder
+                    };
+                });
+            } catch (error) {
+                console.error('Error refreshing folder:', error);
             }
         }
-    }, [currentFolder]);
+    };
 
-    const refreshCurrentFolder = () => {
-        if (selectedFolder) {
-            fetchFolder({ id: selectedFolder.id });
+    const loadFolder = async (folderId: string) => {
+        dispatch({ type: 'SET_LOADING', payload: { folderId, isLoading: true } });
+        try {
+            const response = await getFolderContents({ id: folderId });
+            dispatch({ type: 'UPDATE_FOLDER', payload: { folder: response.data } });
+        } catch (error) {
+            console.error('Error loading folder:', error);
+        } finally {
+            dispatch({ type: 'SET_LOADING', payload: { folderId, isLoading: false } });
         }
-        // Also refresh the root folder to keep the tree in sync
-        fetchRoot();
     };
 
     // Handle expand/collapse
     const handleExpandedChange = async (_event: React.SyntheticEvent | null, itemIds: string[]) => {
-        setState(prev => ({ ...prev, expanded: itemIds }));
-        // Load children for any newly expanded folder
-        for (const id of itemIds) {
-            if (!state.expandedFolders[id]) {
-                setState(prev => ({ ...prev, loadingFolderId: id }));
-                try {
-                    const response = await getFolderContents({ id });
-                    setState(prev => ({
-                        ...prev,
-                        expandedFolders: { 
-                            ...prev.expandedFolders, 
-                            [id]: {
-                                ...response.data,
-                                children: response.data.children || []
-                            }
-                        },
-                        loadingFolderId: null
-                    }));
-                } catch (error) {
-                    console.error('Error loading folder contents:', error);
-                    setState(prev => ({ ...prev, loadingFolderId: null }));
-                }
+        const currentExpanded = state.expanded;
+        const newlyExpanded = itemIds.filter(id => !currentExpanded.includes(id));
+        const collapsed = currentExpanded.filter(id => !itemIds.includes(id));
+
+        // Handle collapse
+        collapsed.forEach(id => {
+            dispatch({ type: 'COLLAPSE_FOLDER', payload: { folderId: id } });
+        });
+
+        // Handle expand
+        for (const id of newlyExpanded) {
+            dispatch({ type: 'EXPAND_FOLDER', payload: { folderId: id } });
+            const node = state.treeData[id];
+            if (node && !node.isLoaded && !node.isLoading) {
+                await loadFolder(id);
             }
         }
     };
 
-    // Handle selection
+    // Handle folder selection
     const handleSelectedChange = async (_event: React.SyntheticEvent | null, itemIds: string | null) => {
         if (!itemIds) return;
-        setState(prev => ({ ...prev, selected: itemIds, loadingFolderId: itemIds }));
-        try {
-            await fetchFolder({ id: itemIds });
-        } catch (error) {
-            console.error('Error loading folder:', error);
+        
+        const folder = state.treeData[itemIds];
+        if (!folder) return;
+
+        dispatch({ type: 'SELECT_FOLDER', payload: { folder } });
+        
+        if (!folder.isLoaded) {
+            await loadFolder(itemIds);
         }
-        setState(prev => ({ ...prev, loadingFolderId: null }));
+
+        // Update breadcrumbs
+        await updateBreadcrumbs(folder);
+    };
+
+    // Handle opening a folder
+    const handleOpenFolder = async (folderId: string) => {
+        const folder = state.treeData[folderId];
+        if (!folder) return;
+
+        // Toggle open state
+        const newOpenFolders = new Set(openFolders);
+        if (newOpenFolders.has(folderId)) {
+            newOpenFolders.delete(folderId);
+        } else {
+            newOpenFolders.add(folderId);
+        }
+        setOpenFolders(newOpenFolders);
+
+        // Select the folder and update breadcrumbs
+        dispatch({ type: 'SELECT_FOLDER', payload: { folder } });
+        
+        if (!folder.isLoaded) {
+            await loadFolder(folderId);
+        }
+
+        await updateBreadcrumbs(folder);
+    };
+
+    // Update breadcrumbs helper
+    const updateBreadcrumbs = async (currentFolder: TreeNode) => {
+        const path = [];
+        let current: TreeNode | null = currentFolder;
+        
+        while (current) {
+            path.unshift({ id: current.id, name: current.name });
+            if (current.parentId && current.parentId !== 'root') {
+                const parentNode = state.treeData[current.parentId] as TreeNode | undefined;
+                if (parentNode) {
+                    current = parentNode;
+                } else {
+                    const response = await getFolderContents({ id: current.parentId });
+                    dispatch({ type: 'UPDATE_FOLDER', payload: { folder: response.data } });
+                    current = state.treeData[current.parentId] as TreeNode;
+                }
+            } else {
+                current = null;
+            }
+        }
+        
+        if (path[0]?.id !== 'root') {
+            path.unshift({ id: 'root', name: 'Root' });
+        }
+        
+        setBreadcrumbs(path);
     };
 
     // Handle adding a new item (file or folder)
@@ -192,13 +234,15 @@ export function FileManager({ userRole }: FileManagerProps) {
                 type: 'folder',
                 children: []
             };
-            createNewItem({ parentId, item: newFolder });
+            createNewItem({ parentId, item: newFolder }).then(() => {
+                loadFolder(parentId);
+            });
         }
     };
 
     // Save a new file
     const handleSaveFile = () => {
-        if (!selectedFolder) return;
+        if (!state.selectedFolder) return;
 
         const newFile: Partial<FileType> = {
             id: isEditMode && state.selectedFile ? state.selectedFile.id : `file-${Date.now()}`,
@@ -209,9 +253,15 @@ export function FileManager({ userRole }: FileManagerProps) {
         };
 
         if (isEditMode && state.selectedFile) {
-            updateExistingItem({ id: state.selectedFile.id, updates: newFile });
+            updateExistingItem({ id: state.selectedFile.id, updates: newFile }).then(() => {
+                setIsAddFileDialogOpen(false);
+                loadFolder(state.selectedFolder!.id);
+            });
         } else {
-            createNewItem({ parentId: selectedFolder.id, item: newFile });
+            createNewItem({ parentId: state.selectedFolder.id, item: newFile }).then(() => {
+                setIsAddFileDialogOpen(false);
+                loadFolder(state.selectedFolder!.id);
+            });
         }
     };
 
@@ -239,35 +289,101 @@ export function FileManager({ userRole }: FileManagerProps) {
     // Handle folder rename
     const handleFolderRename = async (id: string, newName: string) => {
         await updateExistingItem({ id, updates: { name: newName } });
-        refreshCurrentFolder();
+        loadFolder(id);
+    };
+
+    // Handle folder selection
+    const handleFolderSelect = (folderId: string) => {
+        const folder = state.treeData[folderId];
+        if (!folder) return;
+        dispatch({ type: 'SELECT_FOLDER', payload: { folder } });
+    };
+
+    // Handle folder toggle (expand/collapse)
+    const handleFolderToggle = async (folderId: string) => {
+        const isExpanded = state.expanded.includes(folderId);
+        if (isExpanded) {
+            dispatch({ type: 'COLLAPSE_FOLDER', payload: { folderId } });
+        } else {
+            dispatch({ type: 'EXPAND_FOLDER', payload: { folderId } });
+            const node = state.treeData[folderId];
+            if (node && !node.isLoaded && !node.isLoading) {
+                await loadFolder(folderId);
+            }
+        }
+    };
+
+    // Handle folder delete
+    const handleFolderDelete = async (folderId: string) => {
+        if (window.confirm('Are you sure you want to delete this folder and all its contents?')) {
+            await deleteExistingItem({ id: folderId });
+            if (state.selectedFolder?.id === folderId) {
+                // If we deleted the selected folder, select its parent
+                const parentId = state.treeData[folderId]?.parentId || 'root';
+                handleSelectedChange(null, parentId);
+            } else {
+                // Otherwise just refresh the current folder
+                loadFolder(state.selectedFolder?.id || 'root');
+            }
+        }
+    };
+
+    // Handle folder refresh
+    const handleFolderRefresh = async (folderId: string) => {
+        await loadFolder(folderId);
     };
 
     // Render tree items recursively
-    const renderTree = (nodes: FileSystemItem[]) => {
+    const renderTree = (nodes: (TreeNode | FileType)[]) => {
         if (!nodes) return null;
         return nodes.map((node) => {
             if (node.type === 'folder') {
                 const isExpanded = state.expanded.includes(node.id);
-                const isLoading = state.loadingFolderId === node.id;
-                const expandedFolder = state.expandedFolders[node.id];
-                const children = expandedFolder?.children || [];
+                const isOpen = openFolders.has(node.id);
+                const treeNode = state.treeData[node.id] || node as TreeNode;
+                const children = treeNode.children || [];
 
                 return (
                     <FileTreeItem
                         key={node.id}
-                        node={node}
+                        node={treeNode}
                         isExpanded={isExpanded}
-                        isLoading={isLoading}
+                        isOpen={isOpen}
+                        isLoading={treeNode.isLoading}
                         userRole={userRole}
                         onAddItem={handleAddItem}
-                        onRename={handleFolderRename}>
-                        {isExpanded && children && renderTree(children)}
+                        onRename={handleFolderRename}
+                        onDelete={handleFolderDelete}
+                        onRefresh={handleFolderRefresh}
+                        onSelect={handleFolderSelect}
+                        onToggle={handleFolderToggle}
+                        onOpenFolder={handleOpenFolder}
+                    >
+                        {isExpanded && children.length > 0 && renderTree(children)}
                     </FileTreeItem>
                 );
             }
             return null;
         });
     };
+
+    // Initial load
+    useEffect(() => {
+        const loadRoot = async () => {
+            setIsLoading(true);
+            try {
+                const response = await getFolderContents({ id: 'root' });
+                const rootFolder = response.data;
+                dispatch({ type: 'UPDATE_FOLDER', payload: { folder: rootFolder } });
+                dispatch({ type: 'SELECT_FOLDER', payload: { folder: rootFolder } });
+            } catch (error) {
+                console.error('Error loading root folder:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadRoot();
+    }, [dispatch]);
 
     return (
         <div className="flex h-full gap-6 p-6">
@@ -276,9 +392,9 @@ export function FileManager({ userRole }: FileManagerProps) {
                 <div className="mb-4">
                     <h2 className="px-2 text-lg font-semibold tracking-tight">Folders</h2>
                 </div>
-                {loadingRoot ? (
+                {isLoading ? (
                     <div className="flex items-center justify-center p-4">
-                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        <Loader2 className="h-6 w-4 animate-spin text-primary" />
                     </div>
                 ) : (
                     <TreeView
@@ -288,15 +404,15 @@ export function FileManager({ userRole }: FileManagerProps) {
                         onSelectedItemsChange={(event, itemIds) => {
                             const selectedId = Array.isArray(itemIds) ? itemIds[0] : itemIds;
                             if (selectedId) {
-                                handleSelectedChange(event, selectedId);
+                                handleFolderSelect(selectedId);
                             }
                         }}
                         slots={{
-                            expandIcon: ChevronRight,
-                            collapseIcon: ChevronDown
+                            expandIcon: () => <></>,  // Empty fragment instead of null
+                            collapseIcon: () => <></> // Empty fragment instead of null
                         }}
                         className="overflow-auto">
-                        {rootFolder && renderTree([rootFolder])}
+                        {state.selectedFolder && renderTree([state.selectedFolder])}
                     </TreeView>
                 )}
             </div>
@@ -306,7 +422,7 @@ export function FileManager({ userRole }: FileManagerProps) {
                 <div className="flex items-center justify-between">
                     <Breadcrumb>
                         <BreadcrumbList>
-                            {breadcrumbs.map((crumb, index) => (
+                            {state.breadcrumbs.map((crumb, index) => (
                                 <BreadcrumbItem key={crumb.id}>
                                     <BreadcrumbLink
                                         onClick={() => handleSelectedChange(null, crumb.id)}
@@ -317,25 +433,25 @@ export function FileManager({ userRole }: FileManagerProps) {
                                     >
                                         {crumb.name}
                                     </BreadcrumbLink>
-                                    {index < breadcrumbs.length - 1 && <BreadcrumbSeparator />}
+                                    {index < state.breadcrumbs.length - 1 && <BreadcrumbSeparator />}
                                 </BreadcrumbItem>
                             ))}
                         </BreadcrumbList>
                     </Breadcrumb>
 
-                    {userRole === 'admin' && selectedFolder && (
+                    {userRole === 'admin' && state.selectedFolder && (
                         <div className="flex gap-2">
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => handleAddItem(selectedFolder.id, 'folder')}>
+                                onClick={() => handleAddItem(state.selectedFolder!.id, 'folder')}>
                                 <Folder className="mr-2 h-4 w-4" />
                                 New Folder
                             </Button>
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => handleAddItem(selectedFolder.id, 'file')}>
+                                onClick={() => handleAddItem(state.selectedFolder!.id, 'file')}>
                                 <File className="mr-2 h-4 w-4" />
                                 New File
                             </Button>
@@ -344,11 +460,11 @@ export function FileManager({ userRole }: FileManagerProps) {
                 </div>
 
                 <FileDisplayArea
-                    selectedFolder={selectedFolder}
+                    selectedFolder={state.selectedFolder}
                     onFileAction={handleFileAction}
                     userRole={userRole}
-                    isLoading={loadingFolder}
-                    isUpdating={loadingDelete}
+                    isLoading={state.treeData[state.selectedFolder?.id || '']?.isLoading}
+                    isUpdating={isDeleteDialogOpen}
                     fileToDelete={state.selectedFile?.id}
                 />
             </div>
@@ -363,15 +479,22 @@ export function FileManager({ userRole }: FileManagerProps) {
                 fileSQL={newFileSQL}
                 onFileNameChange={setNewFileName}
                 onFileSQLChange={setNewFileSQL}
-                isSaving={loadingCreate || loadingUpdate}
+                isSaving={false}
             />
 
             <DeleteDialog
                 isOpen={isDeleteDialogOpen}
                 onClose={() => setIsDeleteDialogOpen(false)}
-                onConfirm={() => state.selectedFile && deleteExistingItem({ id: state.selectedFile.id })}
+                onConfirm={() => {
+                    if (state.selectedFile && state.selectedFolder) {
+                        deleteExistingItem({ id: state.selectedFile.id }).then(() => {
+                            setIsDeleteDialogOpen(false);
+                            loadFolder(state.selectedFolder!.id);
+                        });
+                    }
+                }}
                 file={state.selectedFile}
-                isDeleting={loadingDelete}
+                isDeleting={false}
             />
         </div>
     );

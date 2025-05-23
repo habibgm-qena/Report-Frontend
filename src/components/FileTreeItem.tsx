@@ -1,148 +1,106 @@
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { FileType, FolderType } from '@/services/folderService';
+import React from 'react';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
-import { ChevronRight, ChevronDown, File, Folder, Lock, Loader2, Plus } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FolderOpen, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { TreeNode } from '@/store/fileManager';
+import { FolderContextMenu } from './FolderContextMenu';
 
 interface FileTreeItemProps {
-    node: FileType | FolderType;
+    node: TreeNode;
     isExpanded: boolean;
+    isOpen: boolean;
     isLoading: boolean;
-    isSelected?: boolean;
     userRole: 'admin' | 'user';
     onAddItem: (parentId: string, type: 'file' | 'folder') => void;
-    onRename?: (id: string, newName: string) => void;
+    onRename: (id: string, newName: string) => void;
+    onDelete?: (id: string) => void;
+    onRefresh?: (id: string) => void;
+    onSelect?: (id: string) => void;
+    onToggle?: (id: string) => void;
+    onOpenFolder?: (id: string) => void;
     children?: React.ReactNode;
 }
 
 export function FileTreeItem({
     node,
     isExpanded,
+    isOpen,
     isLoading,
-    isSelected,
     userRole,
     onAddItem,
     onRename,
+    onDelete,
+    onRefresh,
+    onSelect,
+    onToggle,
+    onOpenFolder,
     children
 }: FileTreeItemProps) {
-    const [isEditing, setIsEditing] = useState(false);
-    const [editedName, setEditedName] = useState(node.name);
-
-    if (node.type !== 'folder') return null;
-
-    const hasChildren = node.children && node.children.some(child => child.type === 'folder');
-
-    const handleDoubleClick = (e: React.MouseEvent) => {
-        if (userRole === 'admin') {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsEditing(true);
+    const handleClick = (event: React.MouseEvent) => {
+        event.stopPropagation();
+        if (onSelect && onToggle) {
+            onSelect(node.id);
+            onToggle(node.id);
         }
     };
 
-    const handleNameSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (onRename && editedName.trim() !== '') {
-            onRename(node.id, editedName.trim());
+    const handleExpanderClick = (event: React.MouseEvent) => {
+        event.stopPropagation();
+        if (onToggle) {
+            onToggle(node.id);
         }
-        setIsEditing(false);
     };
 
-    const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setEditedName(e.target.value);
-    };
-
-    const handleBlur = () => {
-        setIsEditing(false);
-        setEditedName(node.name);
-    };
-
-    return (
-        <TreeItem
-            itemId={node.id}
-            label={
-                <div className={cn(
-                    'flex items-center justify-between py-2 px-1 rounded-md transition-colors',
-                    isSelected && 'bg-accent',
-                    !isSelected && 'hover:bg-accent/50'
-                )}>
-                    <div className='flex items-center gap-2' onDoubleClick={handleDoubleClick}>
-                        <div className="flex items-center gap-1 min-w-[24px]">
-                            {hasChildren && (
-                                isLoading ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                    isExpanded ? (
-                                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                    ) : (
-                                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                    )
-                                )
-                            )}
-                            <Folder className={cn(
-                                'h-4 w-4',
-                                isSelected ? 'text-primary' : 'text-muted-foreground'
-                            )} />
-                        </div>
-                        {isEditing ? (
-                            <form onSubmit={handleNameSubmit} onClick={e => e.stopPropagation()}>
-                                <Input
-                                    value={editedName}
-                                    onChange={handleNameChange}
-                                    onBlur={handleBlur}
-                                    autoFocus
-                                    className="h-6 w-40"
-                                />
-                            </form>
-                        ) : (
-                            <span className={cn(
-                                'text-sm',
-                                isSelected && 'font-medium'
-                            )}>{node.name}</span>
-                        )}
-                    </div>
-                    {userRole === 'admin' && (
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button 
-                                    variant='ghost' 
-                                    size='icon' 
-                                    className={cn(
-                                        'h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity',
-                                        isSelected && 'opacity-100'
-                                    )}>
-                                    <Plus className='h-3 w-3' />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className='w-48' align="start">
-                                <div className='flex flex-col gap-2'>
-                                    <Button
-                                        variant='outline'
-                                        size='sm'
-                                        className='justify-start'
-                                        onClick={() => onAddItem(node.id, 'folder')}>
-                                        <Folder className='mr-2 h-4 w-4' />
-                                        Add Folder
-                                    </Button>
-                                    <Button
-                                        variant='outline'
-                                        size='sm'
-                                        className='justify-start'
-                                        onClick={() => onAddItem(node.id, 'file')}>
-                                        <File className='mr-2 h-4 w-4' />
-                                        Add File
-                                    </Button>
-                                </div>
-                            </PopoverContent>
-                        </Popover>
+    const content = (
+        <div
+            className={cn(
+                'flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-accent',
+                'cursor-pointer select-none'
+            )}
+            onClick={handleClick}
+        >
+            <div className="flex items-center gap-1 min-w-[24px]">
+                <div onClick={handleExpanderClick} className="cursor-pointer">
+                    {isLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : isExpanded ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     )}
                 </div>
-            }
-            className="group">
-            {children}
-        </TreeItem>
+                {isOpen ? (
+                    <FolderOpen className="h-4 w-4 text-blue-500" />
+                ) : (
+                    <Folder className="h-4 w-4 text-blue-500" />
+                )}
+            </div>
+            <span className="text-sm">{node.name}</span>
+        </div>
+    );
+
+    return (
+        <FolderContextMenu
+            folder={node}
+            onAddItem={onAddItem}
+            onRename={onRename}
+            onDelete={onDelete}
+            onRefresh={onRefresh}
+            onOpenFolder={onOpenFolder}
+            userRole={userRole}
+        >
+            <div role="treeitem" className="relative">
+                {content}
+                {isExpanded && (
+                    <div role="group" className="ml-6">
+                        {children || (
+                            <div className="py-2 px-4 text-sm text-muted-foreground italic">
+                                This folder is empty
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </FolderContextMenu>
     );
 } 
