@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAtom } from 'jotai';
 import { SimpleTreeView as TreeView } from '@mui/x-tree-view/SimpleTreeView';
-import { ChevronDown, ChevronRight, File, Loader2, Folder, ChevronLeft } from 'lucide-react';
+import { ChevronDown, ChevronRight, File, Loader2, Folder, ChevronLeft, FolderInput, RefreshCw } from 'lucide-react';
 import { createItem, deleteItem, getFolderContents, updateItem } from '@/app/api/endpoints/fileManager';
 import { useGenericMethod } from '@/hooks/useGenericMethod';
 import { FileType, FolderType } from '@/services/folderService';
@@ -483,6 +483,30 @@ export function FileManager({ userRole }: FileManagerProps) {
         setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     }, [sortOrder, setSortOrder]);
 
+    const handleCollapseAll = () => {
+        setState(prev => ({
+            ...prev,
+            expanded: ['root'] // Only keep root expanded
+        }));
+    };
+
+    const handleRefreshAll = async () => {
+        setIsLoading(true);
+        try {
+            const response = await getFolderContents({ id: 'root' });
+            const rootFolder = response.data;
+            dispatch({ type: 'UPDATE_FOLDER', payload: { folder: rootFolder } });
+            // Also refresh the currently selected folder if it's not root
+            if (state.selectedFolder && state.selectedFolder.id !== 'root') {
+                await loadFolder(state.selectedFolder.id);
+            }
+        } catch (error) {
+            console.error('Error refreshing folders:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // Initial load
     useEffect(() => {
         const loadRoot = async () => {
@@ -506,8 +530,27 @@ export function FileManager({ userRole }: FileManagerProps) {
             <div className="flex h-full gap-6 p-6">
                 {/* Left sidebar with tree view */}
                 <div className="w-80 rounded-lg border bg-card p-4 shadow-sm">
-                    <div className="mb-4">
+                    <div className="mb-4 flex items-center justify-between">
                         <h2 className="px-2 text-lg font-semibold tracking-tight">Folders</h2>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={handleCollapseAll}
+                                title="Collapse all folders"
+                            >
+                                <FolderInput className="h-4 w-4" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={handleRefreshAll}
+                                disabled={isLoading}
+                                title="Refresh all folders"
+                            >
+                                <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+                            </Button>
+                        </div>
                     </div>
                     {isLoading ? (
                         <div className="flex items-center justify-center p-4">
