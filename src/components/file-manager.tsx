@@ -65,6 +65,7 @@ export function FileManager({ userRole }: FileManagerProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [navigationHistory, setNavigationHistory] = useState<string[]>(['root']);
     const [currentHistoryIndex, setCurrentHistoryIndex] = useState(0);
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
     // Generic method hooks
     const { data: rootFolder, loading: loadingRoot, handleAction: fetchRoot } = useGenericMethod({
@@ -525,56 +526,127 @@ export function FileManager({ userRole }: FileManagerProps) {
         loadRoot();
     }, [dispatch]);
 
+    const handleToggleSidebar = () => {
+        setIsSidebarCollapsed(!isSidebarCollapsed);
+    };
+
     return (
         <>
             <div className="flex h-full gap-6 p-6">
                 {/* Left sidebar with tree view */}
-                <div className="w-80 rounded-lg border bg-card p-4 shadow-sm">
-                    <div className="mb-4 flex items-center justify-between">
-                        <h2 className="px-2 text-lg font-semibold tracking-tight">Folders</h2>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={handleCollapseAll}
-                                title="Collapse all folders"
-                            >
-                                <FolderInput className="h-4 w-4" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={handleRefreshAll}
-                                disabled={isLoading}
-                                title="Refresh all folders"
-                            >
-                                <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
-                            </Button>
+                <div className={cn(
+                    "bg-background border-r border-border/10 shadow-lg overflow-hidden transition-all duration-500 ease-in-out flex flex-col relative",
+                    isSidebarCollapsed ? "w-14" : "w-80"
+                )}>
+                    <div className={cn(
+                        "bg-muted/5 border-b border-border/10 transition-all duration-500",
+                        isSidebarCollapsed ? "px-2 py-3" : "px-4 py-4"
+                    )}>
+                        <div className="flex items-center justify-between">
+                            <div className={cn(
+                                "flex items-center transition-all duration-500 overflow-hidden",
+                                isSidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
+                            )}>
+                                <h2 className="text-base font-medium text-foreground/80">
+                                    File Explorer
+                                </h2>
+                            </div>
+                            <div className={cn(
+                                "flex items-center gap-2 transition-all duration-500",
+                                isSidebarCollapsed ? "ml-0 justify-center w-full" : "ml-auto"
+                            )}>
+                                <div className={cn(
+                                    "flex items-center gap-2 transition-all duration-500",
+                                    isSidebarCollapsed ? "scale-0 w-0" : "scale-100 w-auto"
+                                )}>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={handleCollapseAll}
+                                        className="hover:bg-accent transition-colors"
+                                        title="Collapse all folders"
+                                    >
+                                        <FolderInput className="h-4 w-4 text-foreground/70" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={handleRefreshAll}
+                                        disabled={isLoading}
+                                        className="hover:bg-accent transition-colors"
+                                        title="Refresh all folders"
+                                    >
+                                        <RefreshCw className={cn("h-4 w-4 text-foreground/70", isLoading && "animate-spin")} />
+                                    </Button>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={handleToggleSidebar}
+                                    className={cn(
+                                        "hover:bg-accent transition-all duration-300",
+                                        isSidebarCollapsed ? "w-full h-8" : ""
+                                    )}
+                                    title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                                >
+                                    <ChevronLeft className={cn(
+                                        "h-4 w-4 text-foreground/70 transition-transform duration-500",
+                                        isSidebarCollapsed && "rotate-180"
+                                    )} />
+                                </Button>
+                            </div>
                         </div>
                     </div>
-                    {isLoading ? (
-                        <div className="flex items-center justify-center p-4">
-                            <Loader2 className="h-6 w-4 animate-spin text-primary" />
+                    
+                    <div className={cn(
+                        "transition-all duration-500 ease-in-out",
+                        isSidebarCollapsed ? "opacity-0 scale-95" : "opacity-100 scale-100"
+                    )}>
+                        <div className="p-2 flex-1 overflow-hidden hover:overflow-auto transition-all duration-200">
+                            {isLoading ? (
+                                <div className="flex items-center justify-center p-8">
+                                    <Loader2 className="h-5 w-5 animate-spin text-foreground/50" />
+                                </div>
+                            ) : (
+                                <TreeView
+                                    expandedItems={state.expanded}
+                                    selectedItems={state.selected}
+                                    onExpandedItemsChange={handleExpandedChange}
+                                    onSelectedItemsChange={(event, itemIds) => {
+                                        const selectedId = Array.isArray(itemIds) ? itemIds[0] : itemIds;
+                                        if (selectedId) {
+                                            handleFolderSelect(selectedId);
+                                        }
+                                    }}
+                                    slots={{
+                                        expandIcon: () => <></>,
+                                        collapseIcon: () => <></>
+                                    }}
+                                    className="overflow-auto scrollbar-thin scrollbar-thumb-accent/50 scrollbar-track-transparent">
+                                    {state.treeData[rootFolderId] && renderTree([state.treeData[rootFolderId]])}
+                                </TreeView>
+                            )}
                         </div>
-                    ) : (
-                        <TreeView
-                            expandedItems={state.expanded}
-                            selectedItems={state.selected}
-                            onExpandedItemsChange={handleExpandedChange}
-                            onSelectedItemsChange={(event, itemIds) => {
-                                const selectedId = Array.isArray(itemIds) ? itemIds[0] : itemIds;
-                                if (selectedId) {
-                                    handleFolderSelect(selectedId);
-                                }
-                            }}
-                            slots={{
-                                expandIcon: () => <></>,
-                                collapseIcon: () => <></>
-                            }}
-                            className="overflow-auto">
-                            {state.treeData[rootFolderId] && renderTree([state.treeData[rootFolderId]])}
-                        </TreeView>
-                    )}
+                    </div>
+
+                    {/* Minimal Actions in Collapsed State */}
+                    <div className={cn(
+                        "absolute inset-x-0 top-16 transition-all duration-500 flex flex-col items-center gap-2 px-2",
+                        isSidebarCollapsed ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
+                    )}>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="w-full h-9 hover:bg-accent transition-colors"
+                            onClick={handleRefreshAll}
+                            title="Refresh All"
+                        >
+                            <RefreshCw className={cn(
+                                "h-4 w-4 text-foreground/70",
+                                isLoading && "animate-spin"
+                            )} />
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Main content area */}
