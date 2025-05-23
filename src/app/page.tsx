@@ -1,16 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+
 import { FileManager } from '@/components/file-manager';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import { ModeToggle } from '@/components/mode-toggle';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 import { Github } from 'lucide-react';
 
 export default function Home() {
@@ -19,7 +15,7 @@ export default function Home() {
 
     return (
         <div className='flex h-screen flex-col'>
-            <header className='sticky top-0 z-50 flex h-16 items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60'>
+            {/* <header className='sticky top-0 z-50 flex h-16 items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60'>
                 <div className='container flex items-center justify-between'>
                     <div className='flex items-center gap-2'>
                         <h1 className='text-xl font-semibold'>File Manager</h1>
@@ -47,7 +43,7 @@ export default function Home() {
                         <ModeToggle />
                     </div>
                 </div>
-            </header>
+            </header> */}
             <main className='flex-1 overflow-hidden'>
                 <FileManager userRole={userRole} />
             </main>
