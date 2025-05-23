@@ -38,6 +38,9 @@ interface FileDisplayAreaProps {
     isLoading: boolean;
     isUpdating?: boolean;
     fileToDelete?: string | null;
+    viewMode: 'grid' | 'list';
+    sortBy: 'name' | 'date' | 'size';
+    sortOrder: 'asc' | 'desc';
 }
 
 export function FileDisplayArea({
@@ -47,21 +50,10 @@ export function FileDisplayArea({
     isLoading,
     isUpdating,
     fileToDelete,
+    viewMode,
+    sortBy,
+    sortOrder,
 }: FileDisplayAreaProps) {
-    const [viewMode, setViewMode] = useAtom(viewModeAtom);
-    const [{ sortBy, sortOrder }, setSortConfig] = useAtom(sortConfigAtom);
-
-    const toggleSortOrder = () => {
-        setSortConfig({ sortBy, sortOrder: sortOrder === 'asc' ? 'desc' : 'asc' });
-    };
-
-    const handleSortChange = (newSortBy: 'name' | 'date' | 'size') => {
-        setSortConfig({
-            sortBy: newSortBy,
-            sortOrder: sortBy === newSortBy ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc',
-        });
-    };
-
     const sortedFiles = selectedFolder?.children
         ?.filter((item): item is FileType => item.type === 'file')
         ?.sort((a, b) => {
@@ -87,52 +79,6 @@ export function FileDisplayArea({
             </div>
         );
     }
-
-    const ViewControls = () => (
-        <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-                <Button
-                    variant={viewMode === 'grid' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setViewMode('grid')}
-                >
-                    <Grid className="mr-2 h-4 w-4" />
-                    Grid
-                </Button>
-                <Button
-                    variant={viewMode === 'list' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setViewMode('list')}
-                >
-                    <List className="mr-2 h-4 w-4" />
-                    List
-                </Button>
-            </div>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                        Sort by: {sortBy.charAt(0).toUpperCase() + sortBy.slice(1)}
-                        {sortOrder === 'asc' ? (
-                            <SortAsc className="ml-2 h-4 w-4" />
-                        ) : (
-                            <SortDesc className="ml-2 h-4 w-4" />
-                        )}
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleSortChange('name')}>
-                        Name
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleSortChange('date')}>
-                        Date Modified
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleSortChange('size')}>
-                        Size
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-        </div>
-    );
 
     const FileActions = ({ file }: { file: FileType }) => (
         <div className="flex items-center gap-1">
@@ -194,8 +140,6 @@ export function FileDisplayArea({
 
     return (
         <div className="h-full space-y-4 p-4">
-            <ViewControls />
-
             {viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                     {sortedFiles.map((file) => (
