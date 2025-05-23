@@ -41,6 +41,7 @@ export function FileManager({ userRole }: FileManagerProps) {
     const [, setBreadcrumbs] = useAtom(breadcrumbsAtom);
     const [, dispatch] = useAtom(treeActionsAtom);
     const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
+    const [rootFolderId, setRootFolderId] = useState<string>('root');
 
     const [isAddFileDialogOpen, setIsAddFileDialogOpen] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -167,24 +168,33 @@ export function FileManager({ userRole }: FileManagerProps) {
     };
 
     // Handle opening a folder
-    const handleOpenFolder = async (folderId: string) => {
+    const handleOpenFolder = async (folderId: string, asRoot: boolean = false) => {
         const folder = state.treeData[folderId];
         if (!folder) return;
 
-        // Toggle open state
-        const newOpenFolders = new Set(openFolders);
-        if (newOpenFolders.has(folderId)) {
-            newOpenFolders.delete(folderId);
+        if (asRoot) {
+            // Set as new root folder
+            setRootFolderId(folderId);
+            dispatch({ type: 'SELECT_FOLDER', payload: { folder } });
+            
+            if (!folder.isLoaded) {
+                await loadFolder(folderId);
+            }
         } else {
-            newOpenFolders.add(folderId);
-        }
-        setOpenFolders(newOpenFolders);
-
-        // Select the folder and update breadcrumbs
-        dispatch({ type: 'SELECT_FOLDER', payload: { folder } });
-        
-        if (!folder.isLoaded) {
-            await loadFolder(folderId);
+            // Toggle open state for regular folder
+            const newOpenFolders = new Set(openFolders);
+            if (newOpenFolders.has(folderId)) {
+                newOpenFolders.delete(folderId);
+            } else {
+                newOpenFolders.add(folderId);
+            }
+            setOpenFolders(newOpenFolders);
+            
+            // Update selected folder and load if needed
+            dispatch({ type: 'SELECT_FOLDER', payload: { folder } });
+            if (!folder.isLoaded) {
+                await loadFolder(folderId);
+            }
         }
 
         await updateBreadcrumbs(folder);
@@ -340,6 +350,7 @@ export function FileManager({ userRole }: FileManagerProps) {
             if (node.type === 'folder') {
                 const isExpanded = state.expanded.includes(node.id);
                 const isOpen = openFolders.has(node.id);
+                const isSelected = state.selectedFolder?.id === node.id;
                 const treeNode = state.treeData[node.id] || node as TreeNode;
                 const children = treeNode.children || [];
 
@@ -349,6 +360,7 @@ export function FileManager({ userRole }: FileManagerProps) {
                         node={treeNode}
                         isExpanded={isExpanded}
                         isOpen={isOpen}
+                        isSelected={isSelected}
                         isLoading={treeNode.isLoading}
                         userRole={userRole}
                         onAddItem={handleAddItem}
@@ -408,11 +420,11 @@ export function FileManager({ userRole }: FileManagerProps) {
                             }
                         }}
                         slots={{
-                            expandIcon: () => <></>,  // Empty fragment instead of null
-                            collapseIcon: () => <></> // Empty fragment instead of null
+                            expandIcon: () => <></>,
+                            collapseIcon: () => <></>
                         }}
                         className="overflow-auto">
-                        {state.selectedFolder && renderTree([state.selectedFolder])}
+                        {state.treeData[rootFolderId] && renderTree([state.treeData[rootFolderId]])}
                     </TreeView>
                 )}
             </div>
