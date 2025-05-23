@@ -1,18 +1,15 @@
 'use client';
 
-import type React from 'react';
-import { useState } from 'react';
-
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle
-} from '@/components/ui/alert-dialog';
+import { useEffect, useState } from 'react';
+import { SimpleTreeView as TreeView } from '@mui/x-tree-view/SimpleTreeView';
+import { ChevronDown, ChevronRight, File, Loader2, Folder } from 'lucide-react';
+import { createItem, deleteItem, getFolderContents, updateItem } from '@/app/api/endpoints/fileManager';
+import { useGenericMethod } from '@/hooks/useGenericMethod';
+import { FileType, FolderType } from '@/services/folderService';
+import { FileTreeItem } from './FileTreeItem';
+import { FileActions } from './FileActions';
+import { FileDialog } from './FileDialog';
+import { DeleteDialog } from './DeleteDialog';
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -21,101 +18,22 @@ import {
     BreadcrumbSeparator
 } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Textarea } from '@/components/ui/textarea';
-// import { TreeView } from '@mui/x-tree-view/TreeView';
-import { SimpleTreeView as TreeView } from '@mui/x-tree-view/SimpleTreeView';
-import { TreeItem } from '@mui/x-tree-view/TreeItem';
-
-import { ChevronDown, ChevronRight, Download, Edit, File, Folder, Lock, Plus, Trash2 } from 'lucide-react';
-
-// Types for our file system
-type FileType = {
-    id: string;
-    name: string;
-    type: 'file';
-    sql?: string;
-};
-
-type FolderType = {
-    id: string;
-    name: string;
-    type: 'folder';
-    children: (FileType | FolderType)[];
-};
-
-type FileSystemItem = FileType | FolderType;
-
-// Initial mock data
-const initialFileSystem: FolderType[] = [
-    {
-        id: 'folder-1',
-        name: 'Reports',
-        type: 'folder',
-        children: [
-            {
-                id: 'folder-1-1',
-                name: 'Financial',
-                type: 'folder',
-                children: [
-                    {
-                        id: 'file-1-1-1',
-                        name: 'Q1 Report',
-                        type: 'file',
-                        sql: 'SELECT * FROM financial_data WHERE quarter = 1'
-                    },
-                    {
-                        id: 'file-1-1-2',
-                        name: 'Q2 Report',
-                        type: 'file',
-                        sql: 'SELECT * FROM financial_data WHERE quarter = 2'
-                    }
-                ]
-            },
-            {
-                id: 'folder-1-2',
-                name: 'Marketing',
-                type: 'folder',
-                children: [
-                    {
-                        id: 'file-1-2-1',
-                        name: 'Campaign Analysis',
-                        type: 'file',
-                        sql: 'SELECT * FROM marketing_campaigns'
-                    }
-                ]
-            }
-        ]
-    },
-    {
-        id: 'folder-2',
-        name: 'Dashboards',
-        type: 'folder',
-        children: [
-            { id: 'file-2-1', name: 'Executive Dashboard', type: 'file', sql: 'SELECT * FROM executive_metrics' }
-        ]
-    }
-];
+import { cn } from '@/lib/utils';
 
 interface FileManagerProps {
     userRole: 'admin' | 'user';
 }
 
+type FileSystemItem = FileType | FolderType;
+
 export function FileManager({ userRole }: FileManagerProps) {
-    const [fileSystem, setFileSystem] = useState<FolderType[]>(initialFileSystem);
+    const [expanded, setExpanded] = useState<string[]>(['root']);
+    const [selected, setSelected] = useState<string>('root');
+    const [loadingFolderId, setLoadingFolderId] = useState<string | null>(null);
     const [selectedFolder, setSelectedFolder] = useState<FolderType | null>(null);
-    const [selectedFile, setSelectedFile] = useState<FileType | null>(null);
+    const [expandedFolders, setExpandedFolders] = useState<{ [key: string]: FolderType }>({});
     const [breadcrumbs, setBreadcrumbs] = useState<{ id: string; name: string }[]>([]);
+    const [selectedFile, setSelectedFile] = useState<FileType | null>(null);
     const [isAddFileDialogOpen, setIsAddFileDialogOpen] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [newItemType, setNewItemType] = useState<'file' | 'folder' | null>(null);
@@ -123,35 +41,110 @@ export function FileManager({ userRole }: FileManagerProps) {
     const [newFileSQL, setNewFileSQL] = useState('');
     const [isEditMode, setIsEditMode] = useState(false);
 
-    // Function to find a folder by ID in the file system
-    const findFolderById = (
-        items: FileSystemItem[],
-        id: string,
-        path: { id: string; name: string }[] = []
-    ): { folder: FolderType | null; path: { id: string; name: string }[] } => {
-        for (const item of items) {
-            if (item.id === id && item.type === 'folder') {
-                return { folder: item as FolderType, path: [...path, { id: item.id, name: item.name }] };
-            }
-            if (item.type === 'folder') {
-                const result = findFolderById((item as FolderType).children, id, [
-                    ...path,
-                    { id: item.id, name: item.name }
-                ]);
-                if (result.folder) return result;
+    // Generic method hooks
+    const { data: rootFolder, loading: loadingRoot, handleAction: fetchRoot } = useGenericMethod({
+        method: 'GET',
+        apiMethod: getFolderContents,
+        successMessage: 'Root folder loaded successfully'
+    });
+
+    const { data: currentFolder, loading: loadingFolder, handleAction: fetchFolder } = useGenericMethod({
+        method: 'GET',
+        apiMethod: getFolderContents,
+        successMessage: 'Folder contents loaded successfully'
+    });
+
+    const { loading: loadingCreate, handleAction: createNewItem } = useGenericMethod({
+        method: 'POST',
+        apiMethod: createItem,
+        successMessage: 'Item created successfully',
+        onSuccess: () => {
+            setIsAddFileDialogOpen(false);
+            refreshCurrentFolder();
+        }
+    });
+
+    const { loading: loadingUpdate, handleAction: updateExistingItem } = useGenericMethod({
+        method: 'PATCH',
+        apiMethod: updateItem,
+        successMessage: 'Item updated successfully',
+        onSuccess: () => {
+            setIsAddFileDialogOpen(false);
+            refreshCurrentFolder();
+        }
+    });
+
+    const { loading: loadingDelete, handleAction: deleteExistingItem } = useGenericMethod({
+        method: 'DELETE',
+        apiMethod: deleteItem,
+        successMessage: 'Item deleted successfully',
+        onSuccess: () => {
+            setIsDeleteDialogOpen(false);
+            refreshCurrentFolder();
+        }
+    });
+
+    // Initial load
+    useEffect(() => {
+        fetchRoot();
+    }, []);
+
+    // Update selected folder when currentFolder changes
+    useEffect(() => {
+        if (currentFolder) {
+            setSelectedFolder(currentFolder);
+            setSelected(currentFolder.id);
+            const buildBreadcrumbs = async (folder: FolderType) => {
+                const path = [];
+                let current: FolderType | null = folder;
+                while (current) {
+                    path.unshift({ id: current.id, name: current.name });
+                    if (current.parentId && current.parentId !== 'root') {
+                        const response = await getFolderContents({ id: current.parentId });
+                        current = response.data;
+                    } else {
+                        current = null;
+                    }
+                }
+                if (path[0]?.id !== 'root') {
+                    path.unshift({ id: 'root', name: 'Root' });
+                }
+                setBreadcrumbs(path);
+            };
+            buildBreadcrumbs(currentFolder);
+            if (currentFolder.id !== 'root') {
+                setExpandedFolders(prev => ({ ...prev, [currentFolder.id]: currentFolder }));
             }
         }
-        return { folder: null, path: [] };
+    }, [currentFolder]);
+
+    const refreshCurrentFolder = () => {
+        if (selectedFolder) {
+            fetchFolder({ id: selectedFolder.id });
+        }
     };
 
-    // Handle tree node selection
-    const handleNodeSelect = (_event: React.SyntheticEvent, nodeId: string) => {
-        const { folder, path } = findFolderById(fileSystem, nodeId);
-        if (folder) {
-            setSelectedFolder(folder);
-            setBreadcrumbs(path);
-            setSelectedFile(null);
+    // Handle expand/collapse
+    const handleExpandedChange = async (_event: React.SyntheticEvent | null, itemIds: string[]) => {
+        setExpanded(itemIds);
+        // Load children for any newly expanded folder
+        for (const id of itemIds) {
+            if (!expandedFolders[id]) {
+                setLoadingFolderId(id);
+                const response = await getFolderContents({ id });
+                setExpandedFolders(prev => ({ ...prev, [id]: response.data }));
+                setLoadingFolderId(null);
+            }
         }
+    };
+
+    // Handle selection
+    const handleSelectedChange = async (_event: React.SyntheticEvent | null, itemIds: string | null) => {
+        if (!itemIds) return;
+        setSelected(itemIds);
+        setLoadingFolderId(itemIds);
+        fetchFolder({ id: itemIds });
+        setLoadingFolderId(null);
     };
 
     // Handle adding a new item (file or folder)
@@ -163,46 +156,21 @@ export function FileManager({ userRole }: FileManagerProps) {
         if (type === 'file') {
             setIsAddFileDialogOpen(true);
         } else {
-            // Add a new folder directly
-            const newFolder: FolderType = {
+            // Add a new folder
+            const newFolder: Partial<FolderType> = {
                 id: `folder-${Date.now()}`,
                 name: 'New Folder',
-                type: 'folder',
-                children: []
+                type: 'folder'
             };
-
-            addItemToFileSystem(parentId, newFolder);
+            createNewItem({ parentId, item: newFolder });
         }
-    };
-
-    // Add item to file system
-    const addItemToFileSystem = (parentId: string, newItem: FileSystemItem) => {
-        const updateFileSystem = (items: FileSystemItem[]): FileSystemItem[] => {
-            return items.map((item) => {
-                if (item.id === parentId && item.type === 'folder') {
-                    return {
-                        ...item,
-                        children: [...(item as FolderType).children, newItem]
-                    };
-                }
-                if (item.type === 'folder') {
-                    return {
-                        ...item,
-                        children: updateFileSystem((item as FolderType).children)
-                    };
-                }
-                return item;
-            });
-        };
-
-        setFileSystem(updateFileSystem(fileSystem) as FolderType[]);
     };
 
     // Save a new file
     const handleSaveFile = () => {
         if (!selectedFolder) return;
 
-        const newFile: FileType = {
+        const newFile: Partial<FileType> = {
             id: isEditMode && selectedFile ? selectedFile.id : `file-${Date.now()}`,
             name: newFileName,
             type: 'file',
@@ -210,34 +178,10 @@ export function FileManager({ userRole }: FileManagerProps) {
         };
 
         if (isEditMode && selectedFile) {
-            // Update existing file
-            updateFile(selectedFile.id, newFile);
+            updateExistingItem({ id: selectedFile.id, updates: newFile });
         } else {
-            // Add new file
-            addItemToFileSystem(selectedFolder.id, newFile);
+            createNewItem({ parentId: selectedFolder.id, item: newFile });
         }
-
-        setIsAddFileDialogOpen(false);
-    };
-
-    // Update a file in the file system
-    const updateFile = (fileId: string, updatedFile: FileType) => {
-        const updateItems = (items: FileSystemItem[]): FileSystemItem[] => {
-            return items.map((item) => {
-                if (item.id === fileId) {
-                    return updatedFile;
-                }
-                if (item.type === 'folder') {
-                    return {
-                        ...item,
-                        children: updateItems((item as FolderType).children)
-                    };
-                }
-                return item;
-            });
-        };
-
-        setFileSystem(updateItems(fileSystem) as FolderType[]);
     };
 
     // Handle file edit
@@ -255,85 +199,36 @@ export function FileManager({ userRole }: FileManagerProps) {
         setIsDeleteDialogOpen(true);
     };
 
-    // Delete a file from the file system
-    const deleteFile = () => {
-        if (!selectedFile) return;
-
-        const deleteFromItems = (items: FileSystemItem[]): FileSystemItem[] => {
-            return items.filter((item) => {
-                if (item.id === selectedFile.id) {
-                    return false;
-                }
-                if (item.type === 'folder') {
-                    return {
-                        ...item,
-                        children: deleteFromItems((item as FolderType).children)
-                    };
-                }
-                return true;
-            });
-        };
-
-        setFileSystem(deleteFromItems(fileSystem) as FolderType[]);
-        setIsDeleteDialogOpen(false);
-        setSelectedFile(null);
-    };
-
     // Handle file download (dummy function)
     const handleDownloadFile = (file: FileType) => {
         console.log(`Downloading file: ${file.name}`);
         alert(`File ${file.name} would be downloaded in a real application`);
     };
 
+    // Handle folder rename
+    const handleFolderRename = async (id: string, newName: string) => {
+        await updateExistingItem({ id, updates: { name: newName } });
+        refreshCurrentFolder();
+    };
+
     // Render tree items recursively
     const renderTree = (nodes: FileSystemItem[]) => {
+        if (!nodes) return null;
         return nodes.map((node) => {
             if (node.type === 'folder') {
+                const isExpanded = expanded.includes(node.id);
+                const isLoading = loadingFolderId === node.id;
                 return (
-                    <TreeItem
+                    <FileTreeItem
                         key={node.id}
-                        itemId={node.id}
-                        label={
-                            <div className='flex items-center justify-between py-1'>
-                                <div className='flex items-center gap-2'>
-                                    <Folder className='h-4 w-4' />
-                                    <span>{node.name}</span>
-                                </div>
-                                {userRole === 'admin' ? (
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button variant='ghost' size='icon' className='h-6 w-6'>
-                                                <Plus className='h-3 w-3' />
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className='w-48'>
-                                            <div className='flex flex-col gap-2'>
-                                                <Button
-                                                    variant='outline'
-                                                    size='sm'
-                                                    className='justify-start'
-                                                    onClick={() => handleAddItem(node.id, 'folder')}>
-                                                    <Folder className='mr-2 h-4 w-4' />
-                                                    Add Folder
-                                                </Button>
-                                                <Button
-                                                    variant='outline'
-                                                    size='sm'
-                                                    className='justify-start'
-                                                    onClick={() => handleAddItem(node.id, 'file')}>
-                                                    <File className='mr-2 h-4 w-4' />
-                                                    Add File
-                                                </Button>
-                                            </div>
-                                        </PopoverContent>
-                                    </Popover>
-                                ) : (
-                                    <Lock className='text-muted-foreground h-4 w-4' />
-                                )}
-                            </div>
-                        }>
-                        {(node as FolderType).children.length > 0 && renderTree((node as FolderType).children)}
-                    </TreeItem>
+                        node={node}
+                        isExpanded={isExpanded}
+                        isLoading={isLoading}
+                        userRole={userRole}
+                        onAddItem={handleAddItem}
+                        onRename={handleFolderRename}>
+                        {isExpanded && expandedFolders[node.id]?.children && renderTree(expandedFolders[node.id].children)}
+                    </FileTreeItem>
                 );
             }
             return null;
@@ -341,169 +236,129 @@ export function FileManager({ userRole }: FileManagerProps) {
     };
 
     return (
-        <div className='flex flex-1 overflow-hidden'>
-            {/* Left sidebar with TreeView */}
-            <div className='bg-muted/20 w-64 border-r p-4'>
+        <div className="flex h-full gap-6 p-6">
+            {/* Left sidebar with tree view */}
+            <div className="w-80 rounded-lg border bg-card p-4 shadow-sm">
+                <div className="mb-4">
+                    <h2 className="px-2 text-lg font-semibold tracking-tight">Folders</h2>
+                </div>
                 <TreeView
-                    aria-label='file system navigator'
-                    slots={{ collapseIcon: ChevronDown, expandIcon: ChevronRight }}
-                    slotProps={{
-                        collapseIcon: { className: 'h-4 w-4' },
-                        expandIcon: { className: 'h-4 w-4' }
+                    expandedItems={expanded}
+                    selectedItems={selected}
+                    onExpandedItemsChange={handleExpandedChange}
+                    onSelectedItemsChange={handleSelectedChange}
+                    slots={{
+                        expandIcon: ChevronRight,
+                        collapseIcon: ChevronDown
                     }}
-                    onSelectedItemsChange={(event, itemIds) => {
-                        const nodeId = Array.isArray(itemIds) ? itemIds[0] : itemIds;
-                        if (event) {
-                            handleNodeSelect(event, nodeId);
-                        }
-                    }}
-                    className='overflow-auto'>
-                    {renderTree(fileSystem)}
+                    className="overflow-auto">
+                    {rootFolder && renderTree([rootFolder])}
                 </TreeView>
             </div>
 
-            {/* Right side with file list */}
-            <div className='flex flex-1 flex-col overflow-hidden'>
-                <div className='flex items-center justify-between border-b p-4'>
+            {/* Main content area */}
+            <div className="flex-1 space-y-4">
+                <div className="flex items-center justify-between">
                     <Breadcrumb>
                         <BreadcrumbList>
-                            <BreadcrumbItem>
-                                <BreadcrumbLink href='#'>Home</BreadcrumbLink>
-                            </BreadcrumbItem>
-                            <BreadcrumbSeparator />
                             {breadcrumbs.map((crumb, index) => (
                                 <BreadcrumbItem key={crumb.id}>
-                                    {index === breadcrumbs.length - 1 ? (
-                                        <BreadcrumbLink href='#' className='font-medium'>
-                                            {crumb.name}
-                                        </BreadcrumbLink>
-                                    ) : (
-                                        <>
-                                            <BreadcrumbLink href='#'>{crumb.name}</BreadcrumbLink>
-                                            <BreadcrumbSeparator />
-                                        </>
-                                    )}
+                                    <BreadcrumbLink
+                                        onClick={() => handleSelectedChange(null, crumb.id)}
+                                        className={cn(
+                                            'cursor-pointer hover:underline',
+                                            selected === crumb.id && 'font-semibold text-primary'
+                                        )}>
+                                        {crumb.name}
+                                    </BreadcrumbLink>
+                                    {index < breadcrumbs.length - 1 && <BreadcrumbSeparator />}
                                 </BreadcrumbItem>
                             ))}
                         </BreadcrumbList>
                     </Breadcrumb>
 
                     {userRole === 'admin' && selectedFolder && (
-                        <Button size='sm' onClick={() => handleAddItem(selectedFolder.id, 'file')}>
-                            Add New
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAddItem(selectedFolder.id, 'folder')}>
+                                <Folder className="mr-2 h-4 w-4" />
+                                New Folder
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAddItem(selectedFolder.id, 'file')}>
+                                <File className="mr-2 h-4 w-4" />
+                                New File
+                            </Button>
+                        </div>
                     )}
                 </div>
 
-                <div className='flex-1 overflow-auto p-4'>
-                    {selectedFolder ? (
-                        <div className='grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'>
+                {/* File list */}
+                <div className="rounded-lg border bg-card">
+                    {loadingFolderId === selected ? (
+                        <div className="flex items-center justify-center h-[300px]">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : !selectedFolder?.children?.length ? (
+                        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
+                            <File className="h-8 w-8 mb-4 text-muted-foreground/50" />
+                            <p className="text-sm">No files or folders available</p>
+                            {userRole === 'admin' && (
+                                <p className="text-sm mt-2">
+                                    Click the buttons above to add new items
+                                </p>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="divide-y">
                             {selectedFolder.children
-                                .filter((item) => item.type === 'file')
+                                .filter((item): item is FileType => item.type === 'file')
                                 .map((file) => (
                                     <div
                                         key={file.id}
-                                        className='group hover:border-primary relative rounded-md border p-3'>
-                                        <div className='flex items-center gap-2'>
-                                            <File className='text-muted-foreground h-4 w-4' />
-                                            <span className='truncate text-sm font-medium'>
-                                                {(file as FileType).name}
-                                            </span>
+                                        className="flex items-center justify-between p-4 hover:bg-accent/50 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <File className="h-4 w-4 text-muted-foreground" />
+                                            <span className="font-medium">{file.name}</span>
                                         </div>
-
-                                        <div className='absolute top-2 right-2 hidden gap-1 group-hover:flex'>
-                                            <Button
-                                                variant='ghost'
-                                                size='icon'
-                                                className='h-6 w-6'
-                                                onClick={() => handleDownloadFile(file as FileType)}>
-                                                <Download className='h-3 w-3' />
-                                            </Button>
-                                            {userRole === 'admin' && (
-                                                <>
-                                                    <Button
-                                                        variant='ghost'
-                                                        size='icon'
-                                                        className='h-6 w-6'
-                                                        onClick={() => handleEditFile(file as FileType)}>
-                                                        <Edit className='h-3 w-3' />
-                                                    </Button>
-                                                    <Button
-                                                        variant='ghost'
-                                                        size='icon'
-                                                        className='h-6 w-6'
-                                                        onClick={() => handleDeleteConfirm(file as FileType)}>
-                                                        <Trash2 className='h-3 w-3' />
-                                                    </Button>
-                                                </>
-                                            )}
-                                        </div>
+                                        <FileActions
+                                            file={file}
+                                            userRole={userRole}
+                                            onEdit={handleEditFile}
+                                            onDelete={handleDeleteConfirm}
+                                            onDownload={handleDownloadFile}
+                                        />
                                     </div>
                                 ))}
-                        </div>
-                    ) : (
-                        <div className='flex h-full items-center justify-center'>
-                            <p className='text-muted-foreground'>Select a folder to view files</p>
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Add/Edit File Dialog */}
-            <Dialog open={isAddFileDialogOpen} onOpenChange={setIsAddFileDialogOpen}>
-                <DialogContent className='sm:max-w-md'>
-                    <DialogHeader>
-                        <DialogTitle>{isEditMode ? 'Edit Report' : 'Add New Report'}</DialogTitle>
-                        <DialogDescription>
-                            {isEditMode ? 'Update the report details below.' : 'Enter the details for your new report.'}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className='grid gap-4 py-4'>
-                        <div className='grid gap-2'>
-                            <Label htmlFor='name'>Report Name</Label>
-                            <Input
-                                id='name'
-                                value={newFileName}
-                                onChange={(e) => setNewFileName(e.target.value)}
-                                placeholder='Enter report name'
-                            />
-                        </div>
-                        <div className='grid gap-2'>
-                            <Label htmlFor='sql'>SQL Query</Label>
-                            <Textarea
-                                id='sql'
-                                value={newFileSQL}
-                                onChange={(e) => setNewFileSQL(e.target.value)}
-                                placeholder='Enter SQL query'
-                                rows={5}
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant='outline' onClick={() => setIsAddFileDialogOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleSaveFile}>Save</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {/* Dialogs */}
+            <FileDialog
+                isOpen={isAddFileDialogOpen}
+                onClose={() => setIsAddFileDialogOpen(false)}
+                onSave={handleSaveFile}
+                isEditMode={isEditMode}
+                fileName={newFileName}
+                fileSQL={newFileSQL}
+                onFileNameChange={setNewFileName}
+                onFileSQLChange={setNewFileSQL}
+                isSaving={loadingCreate || loadingUpdate}
+            />
 
-            {/* Delete Confirmation Dialog */}
-            <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Are you sure you want to delete &quot;{selectedFile?.name}&quot;? This action cannot be
-                            undone.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={deleteFile}>Delete</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <DeleteDialog
+                isOpen={isDeleteDialogOpen}
+                onClose={() => setIsDeleteDialogOpen(false)}
+                onConfirm={() => selectedFile && deleteExistingItem({ id: selectedFile.id })}
+                file={selectedFile}
+                isDeleting={loadingDelete}
+            />
         </div>
     );
 }
