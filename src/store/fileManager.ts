@@ -169,4 +169,20 @@ export const sortConfigAtom = atom(
     const state = get(fileManagerAtom);
     set(fileManagerAtom, { ...state, sortBy, sortOrder });
   }
+);
+
+export const sortByAtom = atom(
+  (get: Getter) => get(fileManagerAtom).sortBy,
+  (get: Getter, set: Setter, sortBy: 'name' | 'date' | 'size') => {
+    const state = get(fileManagerAtom);
+    set(fileManagerAtom, { ...state, sortBy });
+  }
+);
+
+export const sortOrderAtom = atom(
+  (get: Getter) => get(fileManagerAtom).sortOrder,
+  (get: Getter, set: Setter, sortOrder: 'asc' | 'desc') => {
+    const state = get(fileManagerAtom);
+    set(fileManagerAtom, { ...state, sortOrder });
+  }
 ); 

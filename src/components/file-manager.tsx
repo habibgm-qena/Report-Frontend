@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAtom } from 'jotai';
 import { SimpleTreeView as TreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { ChevronDown, ChevronRight, File, Loader2, Folder, ChevronLeft } from 'lucide-react';
@@ -26,11 +26,16 @@ import {
     selectedFolderAtom,
     breadcrumbsAtom,
     treeActionsAtom,
-    TreeNode
+    TreeNode,
+    viewModeAtom,
+    sortByAtom,
+    sortOrderAtom,
+    ViewMode
 } from '@/store/fileManager';
 import { toast } from "@/components/ui/notification-toast"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { NotificationToaster } from "@/components/ui/notification-toast"
+import { ViewSortControls } from './ViewSortControls';
 
 interface FileManagerProps {
     userRole: 'admin' | 'user';
@@ -45,6 +50,10 @@ export function FileManager({ userRole }: FileManagerProps) {
     const [, dispatch] = useAtom(treeActionsAtom);
     const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
     const [rootFolderId, setRootFolderId] = useState<string>('root');
+
+    const [viewMode, setViewMode] = useAtom(viewModeAtom);
+    const [sortBy, setSortBy] = useAtom(sortByAtom);
+    const [sortOrder, setSortOrder] = useAtom(sortOrderAtom);
 
     const [isAddFileDialogOpen, setIsAddFileDialogOpen] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -462,6 +471,18 @@ export function FileManager({ userRole }: FileManagerProps) {
         });
     };
 
+    const handleViewModeChange = useCallback((mode: ViewMode) => {
+        setViewMode(mode);
+    }, [setViewMode]);
+
+    const handleSortChange = useCallback((newSortBy: 'name' | 'date' | 'size') => {
+        setSortBy(newSortBy);
+    }, [setSortBy]);
+
+    const handleSortOrderChange = useCallback(() => {
+        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    }, [sortOrder, setSortOrder]);
+
     // Initial load
     useEffect(() => {
         const loadRoot = async () => {
@@ -514,64 +535,77 @@ export function FileManager({ userRole }: FileManagerProps) {
                 </div>
 
                 {/* Main content area */}
-                <div className="flex-1 space-y-4">
-                    <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={navigateBack}
-                                disabled={!canGoBack}
-                            >
-                                <ChevronLeft className="h-4 w-4" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={navigateForward}
-                                disabled={!canGoForward}
-                            >
-                                <ChevronRight className="h-4 w-4" />
-                            </Button>
-                        </div>
-
-                        <Breadcrumb>
-                            <BreadcrumbList>
-                                {state.breadcrumbs.map((crumb, index) => (
-                                    <BreadcrumbItem key={crumb.id}>
-                                        <BreadcrumbLink
-                                            onClick={() => handleSelectedChange(null, crumb.id)}
-                                            className={cn(
-                                                'cursor-pointer hover:text-primary',
-                                                state.selectedFolder?.id === crumb.id && 'font-semibold text-primary'
-                                            )}
-                                        >
-                                            {crumb.name}
-                                        </BreadcrumbLink>
-                                        {index < state.breadcrumbs.length - 1 && <BreadcrumbSeparator />}
-                                    </BreadcrumbItem>
-                                ))}
-                            </BreadcrumbList>
-                        </Breadcrumb>
-
-                        {userRole === 'admin' && state.selectedFolder && (
-                            <div className="flex gap-2 ml-auto">
+                <div className="flex-1 flex flex-col space-y-4">
+                    <div className="flex items-center justify-between p-4 border-b">
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-1">
                                 <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleAddItem(state.selectedFolder!.id, 'folder')}>
-                                    <Folder className="mr-2 h-4 w-4" />
-                                    New Folder
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={navigateBack}
+                                    disabled={!canGoBack}
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
                                 </Button>
                                 <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleAddItem(state.selectedFolder!.id, 'file')}>
-                                    <File className="mr-2 h-4 w-4" />
-                                    New File
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={navigateForward}
+                                    disabled={!canGoForward}
+                                >
+                                    <ChevronRight className="h-4 w-4" />
                                 </Button>
                             </div>
-                        )}
+
+                            <Breadcrumb>
+                                <BreadcrumbList>
+                                    {state.breadcrumbs.map((crumb, index) => (
+                                        <BreadcrumbItem key={crumb.id}>
+                                            <BreadcrumbLink
+                                                onClick={() => handleSelectedChange(null, crumb.id)}
+                                                className={cn(
+                                                    'cursor-pointer hover:text-primary',
+                                                    state.selectedFolder?.id === crumb.id && 'font-semibold text-primary'
+                                                )}
+                                            >
+                                                {crumb.name}
+                                            </BreadcrumbLink>
+                                            {index < state.breadcrumbs.length - 1 && <BreadcrumbSeparator />}
+                                        </BreadcrumbItem>
+                                    ))}
+                                </BreadcrumbList>
+                            </Breadcrumb>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                            <ViewSortControls
+                                viewMode={viewMode}
+                                sortBy={sortBy}
+                                sortOrder={sortOrder}
+                                onViewModeChange={handleViewModeChange}
+                                onSortChange={handleSortChange}
+                                onSortOrderChange={handleSortOrderChange}
+                            />
+
+                            {userRole === 'admin' && state.selectedFolder && (
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleAddItem(state.selectedFolder!.id, 'folder')}>
+                                        <Folder className="mr-2 h-4 w-4" />
+                                        New Folder
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleAddItem(state.selectedFolder!.id, 'file')}>
+                                        <File className="mr-2 h-4 w-4" />
+                                        New File
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <FileDisplayArea
@@ -581,6 +615,9 @@ export function FileManager({ userRole }: FileManagerProps) {
                         isLoading={state.treeData[state.selectedFolder?.id || '']?.isLoading}
                         isUpdating={isDeleteDialogOpen}
                         fileToDelete={state.selectedFile?.id}
+                        viewMode={viewMode}
+                        sortBy={sortBy}
+                        sortOrder={sortOrder}
                     />
                 </div>
             </div>
