@@ -5,6 +5,9 @@ export interface FileType {
     name: string;
     type: 'file';
     sql?: string;
+    updatedAt?: string;
+    size?: number;
+    description?: string;
 }
 
 export interface FolderType {
@@ -14,6 +17,8 @@ export interface FolderType {
     parentId?: string;
     children: (FileType | FolderType)[];
 }
+
+export type FileSystemItem = FileType | FolderType;
 
 export const folderService = {
     getFolderContents: (folderId?: string) => {
