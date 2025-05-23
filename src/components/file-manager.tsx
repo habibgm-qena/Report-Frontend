@@ -253,31 +253,49 @@ export function FileManager({ userRole }: FileManagerProps) {
     // Update breadcrumbs helper
     const updateBreadcrumbs = async (currentFolder: TreeNode) => {
         const path = [];
-        let current: TreeNode | null = currentFolder;
         
-        // Always start with root
-        path.unshift({ id: 'root', name: 'Root' });
-        
-        // Build path from current folder up to root
-        while (current && current.id !== 'root') {
-            path.push({ id: current.id, name: current.name });
-            if (current.parentId) {
-                const parentNode: TreeNode | undefined = state.treeData[current.parentId];
-                if (parentNode) {
-                    current = parentNode;
-                } else {
-                    try {
-                        const response = await getFolderContents({ id: current.parentId });
-                        dispatch({ type: 'UPDATE_FOLDER', payload: { folder: response.data } });
-                        current = response.data;
-                    } catch (error) {
-                        console.error('Error loading parent folder:', error);
-                        break;
+        if (currentFolder.id === 'root') {
+            path.push({ id: 'root', name: 'Root' });
+        } else {
+            // Helper function to find the path from a folder to the root
+            const findPathToRoot = (folderId: string, visited = new Set<string>()): TreeNode[] => {
+                if (visited.has(folderId)) return []; // Prevent cycles
+                visited.add(folderId);
+
+                // Find the parent of the current folderId
+                let parentNode: TreeNode | null = null;
+                for (const [, folder] of Object.entries(state.treeData)) {
+                    if (folder.type === 'folder' && folder.children) {
+                        const hasChild = folder.children.some(child => child.id === folderId);
+                        if (hasChild) {
+                            parentNode = folder;
+                            break;
+                        }
                     }
                 }
-            } else {
-                break;
+
+                if (parentNode) {
+                    if (parentNode.id === 'root') {
+                        return [state.treeData['root']]; // Return Root node
+                    } else {
+                        const parentPath = findPathToRoot(parentNode.id, visited);
+                        return [...parentPath, parentNode];
+                    }
+                }
+                return []; // Should ideally not happen if tree is consistent
+            };
+
+            // Find the path from the current folder's parent to root
+            const pathToRoot = findPathToRoot(currentFolder.id);
+
+            // Add the path to breadcrumbs (root first)
+            for (const folder of pathToRoot) {
+                if (folder) { // Ensure folder is not null/undefined
+                    path.push({ id: folder.id, name: folder.name });
+                }
             }
+            // Add current folder at the end
+            path.push({ id: currentFolder.id, name: currentFolder.name });
         }
         
         setBreadcrumbs(path);
