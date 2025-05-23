@@ -145,8 +145,10 @@ export const selectedFolderAtom = atom(
 export const breadcrumbsAtom = atom(
   (get: Getter) => get(fileManagerAtom).breadcrumbs,
   (get: Getter, set: Setter, breadcrumbs: { id: string; name: string }[]) => {
-    const state = get(fileManagerAtom);
-    set(fileManagerAtom, { ...state, breadcrumbs });
+    set(fileManagerAtom, (prev) => ({
+      ...prev,
+      breadcrumbs
+    }));
   }
 );
 

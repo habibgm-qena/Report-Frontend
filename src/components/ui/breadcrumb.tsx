@@ -28,7 +28,10 @@ export function Breadcrumb({ className, children, ...props }: BreadcrumbProps) {
   return (
     <nav
       aria-label="breadcrumb"
-      className={cn("flex items-center text-sm", className)}
+      className={cn(
+        "flex items-center text-sm bg-muted/50 px-3 py-2 rounded-md",
+        className
+      )}
       {...props}
     >
       {children}
@@ -40,7 +43,7 @@ export function BreadcrumbList({ className, children, ...props }: BreadcrumbList
   return (
     <div
       role="list"
-      className={cn("flex items-center gap-1.5", className)}
+      className={cn("flex items-center gap-2", className)}
       {...props}
     >
       {children}
@@ -52,7 +55,7 @@ export function BreadcrumbItem({ className, children, ...props }: BreadcrumbItem
   return (
     <div
       role="listitem"
-      className={cn("inline-flex items-center gap-1.5", className)}
+      className={cn("inline-flex items-center gap-2", className)}
       {...props}
     >
       {children}
@@ -68,7 +71,10 @@ export function BreadcrumbLink({
 }: BreadcrumbLinkProps) {
   return (
     <button
-      className={cn("transition-colors hover:text-foreground", className)}
+      className={cn(
+        "transition-colors hover:text-foreground text-muted-foreground hover:bg-muted px-2 py-1 rounded-sm",
+        className
+      )}
       {...props}
     >
       {children}
