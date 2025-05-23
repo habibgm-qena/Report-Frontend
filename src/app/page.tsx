@@ -1,8 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-
 import { FileManager } from '@/components/file-manager';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { ModeToggle } from '@/components/mode-toggle';
+import { Button } from '@/components/ui/button';
+import { Github } from 'lucide-react';
 
 export default function Home() {
     // Mock user role - in a real app, this would come from authentication
@@ -10,19 +19,38 @@ export default function Home() {
 
     return (
         <div className='flex h-screen flex-col'>
-            <header className='flex h-14 items-center border-b px-4 lg:px-6'>
-                <h1 className='text-lg font-semibold'>File Manager</h1>
-                <div className='ml-auto flex items-center gap-4'>
-                    <select
-                        value={userRole}
-                        onChange={(e) => setUserRole(e.target.value as 'admin' | 'user')}
-                        className='border-input bg-background rounded-md border px-3 py-1 text-sm'>
-                        <option value='admin'>Admin</option>
-                        <option value='user'>User</option>
-                    </select>
+            <header className='sticky top-0 z-50 flex h-16 items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60'>
+                <div className='container flex items-center justify-between'>
+                    <div className='flex items-center gap-2'>
+                        <h1 className='text-xl font-semibold'>File Manager</h1>
+                        <div className='h-6 w-px bg-border' />
+                        <Select value={userRole} onValueChange={(value: 'admin' | 'user') => setUserRole(value)}>
+                            <SelectTrigger className='w-[120px]'>
+                                <SelectValue placeholder='Select role' />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value='admin'>Admin</SelectItem>
+                                <SelectItem value='user'>User</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className='flex items-center gap-4'>
+                        <Button variant='outline' size='icon' asChild>
+                            <a
+                                href='https://github.com/your-username/file-manager'
+                                target='_blank'
+                                rel='noopener noreferrer'
+                            >
+                                <Github className='h-4 w-4' />
+                            </a>
+                        </Button>
+                        <ModeToggle />
+                    </div>
                 </div>
             </header>
-            <FileManager userRole={userRole} />
+            <main className='flex-1 overflow-hidden'>
+                <FileManager userRole={userRole} />
+            </main>
         </div>
     );
 }
