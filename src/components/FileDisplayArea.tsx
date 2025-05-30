@@ -1,39 +1,22 @@
-import { useAtom } from 'jotai';
-import { FileType, FolderType } from '@/services/folderService';
-import { viewModeAtom, sortConfigAtom } from '@/store/fileManager';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuTrigger,
+    DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
-    Download,
-    Edit,
-    File,
-    Grid,
-    List,
-    Loader2,
-    MoreVertical,
-    SortAsc,
-    SortDesc,
-    Trash2,
-} from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { FileType, FolderType } from '@/services/folderService';
+import { sortConfigAtom, viewModeAtom } from '@/store/fileManager';
+
+import { formatDistanceToNow } from 'date-fns';
+import { useAtom } from 'jotai';
+import { Download, Edit, File, Grid, List, Loader2, MoreVertical, SortAsc, SortDesc, Trash2 } from 'lucide-react';
 
 interface FileDisplayAreaProps {
     selectedFolder: FolderType | null;
-    onFileAction: (action: 'edit' | 'delete' | 'download', file: FileType) => void;
+    onFileAction: (action: 'edit' | 'delete' | 'download', file: FileType, event?: React.MouseEvent) => void;
     userRole: 'admin' | 'user';
     isLoading: boolean;
     isUpdating?: boolean;
@@ -52,67 +35,65 @@ export function FileDisplayArea({
     fileToDelete,
     viewMode,
     sortBy,
-    sortOrder,
+    sortOrder
 }: FileDisplayAreaProps) {
-    const sortedFiles = selectedFolder?.children
-        ?.filter((item): item is FileType => item.type === 'file')
-        ?.sort((a, b) => {
-            let comparison = 0;
-            switch (sortBy) {
-                case 'name':
-                    comparison = a.name.localeCompare(b.name);
-                    break;
-                case 'date':
-                    comparison = (new Date(b.updatedAt || 0)).getTime() - (new Date(a.updatedAt || 0)).getTime();
-                    break;
-                case 'size':
-                    comparison = (b.size || 0) - (a.size || 0);
-                    break;
-            }
-            return sortOrder === 'asc' ? comparison : -comparison;
-        }) || [];
+    const sortedFiles =
+        selectedFolder?.children
+            ?.filter((item): item is FileType => item.type === 'file')
+            ?.sort((a, b) => {
+                let comparison = 0;
+                switch (sortBy) {
+                    case 'name':
+                        comparison = a.name.localeCompare(b.name);
+                        break;
+                    case 'date':
+                        comparison = new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+                        break;
+                    case 'size':
+                        comparison = (b.size || 0) - (a.size || 0);
+                        break;
+                }
+                return sortOrder === 'asc' ? comparison : -comparison;
+            }) || [];
 
     if (isLoading) {
         return (
-            <div className="flex h-full items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className='flex h-full items-center justify-center'>
+                <Loader2 className='text-primary h-8 w-8 animate-spin' />
             </div>
         );
     }
 
     const FileActions = ({ file }: { file: FileType }) => (
-        <div className="flex items-center gap-1">
+        <div className='flex items-center gap-1'>
             <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => onFileAction('download', file)}
-                disabled={isUpdating && fileToDelete === file.id}
-            >
-                <Download className="h-4 w-4" />
+                variant='ghost'
+                size='icon'
+                className='h-8 w-8'
+                onClick={(e) => onFileAction('download', file, e)}
+                disabled={isUpdating && fileToDelete === file.id}>
+                <Download className='h-4 w-4' />
             </Button>
             {userRole === 'admin' && (
                 <>
                     <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => onFileAction('edit', file)}
-                        disabled={isUpdating && fileToDelete === file.id}
-                    >
-                        <Edit className="h-4 w-4" />
+                        variant='ghost'
+                        size='icon'
+                        className='h-8 w-8'
+                        onClick={(e) => onFileAction('edit', file, e)}
+                        disabled={isUpdating && fileToDelete === file.id}>
+                        <Edit className='h-4 w-4' />
                     </Button>
                     <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive"
-                        onClick={() => onFileAction('delete', file)}
-                        disabled={isUpdating && fileToDelete === file.id}
-                    >
+                        variant='ghost'
+                        size='icon'
+                        className='text-destructive h-8 w-8'
+                        onClick={(e) => onFileAction('delete', file, e)}
+                        disabled={isUpdating && fileToDelete === file.id}>
                         {isUpdating && fileToDelete === file.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className='h-4 w-4 animate-spin' />
                         ) : (
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className='h-4 w-4' />
                         )}
                     </Button>
                 </>
@@ -122,16 +103,16 @@ export function FileDisplayArea({
 
     if (!selectedFolder) {
         return (
-            <div className="flex h-full items-center justify-center">
-                <p className="text-muted-foreground">Select a folder to view files</p>
+            <div className='flex h-full items-center justify-center'>
+                <p className='text-muted-foreground'>Select a folder to view files</p>
             </div>
         );
     }
 
     if (sortedFiles.length === 0) {
         return (
-            <div className="flex h-full items-center justify-center">
-                <p className="text-muted-foreground">
+            <div className='flex h-full items-center justify-center'>
+                <p className='text-muted-foreground'>
                     This folder is empty. {userRole === 'admin' && 'Add a new file!'}
                 </p>
             </div>
@@ -139,48 +120,57 @@ export function FileDisplayArea({
     }
 
     return (
-        <div className="h-full space-y-4 p-4">
+        <div className='h-full space-y-4 p-4'>
             {viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'>
                     {sortedFiles.map((file) => (
                         <div
                             key={file.id}
                             className={cn(
-                                'group relative rounded-lg border bg-card p-4 transition-all hover:shadow-md',
+                                'group bg-card relative rounded-lg border p-4 transition-all hover:shadow-md',
                                 'hover:border-primary/50'
-                            )}
-                        >
-                            <div className="mb-2 flex items-start justify-between">
-                                <div className="flex items-center gap-2">
-                                    <File className="h-8 w-8 text-primary/70" />
+                            )}>
+                            <div className='mb-2 flex items-start justify-between'>
+                                <div className='flex items-center gap-2'>
+                                    <File className='text-primary/70 h-8 w-8' />
                                     <div>
-                                        <h3 className="font-medium">{file.name}</h3>
-                                        <p className="text-xs text-muted-foreground">
+                                        <h3 className='font-medium'>{file.name}</h3>
+                                        <p className='text-muted-foreground text-xs'>
                                             {formatDistanceToNow(new Date(file.updatedAt || Date.now()), {
-                                                addSuffix: true,
+                                                addSuffix: true
                                             })}
                                         </p>
                                     </div>
                                 </div>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                                            <MoreVertical className="h-4 w-4" />
+                                <DropdownMenu modal={false}>
+                                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                        <Button variant='ghost' size='icon' className='h-8 w-8'>
+                                            <MoreVertical className='h-4 w-4' />
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <DropdownMenuItem onClick={() => onFileAction('download', file)}>
+                                    <DropdownMenuContent align='end' onClick={(e) => e.stopPropagation()}>
+                                        <DropdownMenuItem
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onFileAction('download', file, e);
+                                            }}>
                                             Download
                                         </DropdownMenuItem>
                                         {userRole === 'admin' && (
                                             <>
-                                                <DropdownMenuItem onClick={() => onFileAction('edit', file)}>
+                                                <DropdownMenuItem
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onFileAction('edit', file, e);
+                                                    }}>
                                                     Edit
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
-                                                    className="text-destructive"
-                                                    onClick={() => onFileAction('delete', file)}
-                                                >
+                                                    className='text-destructive'
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onFileAction('delete', file, e);
+                                                    }}>
                                                     Delete
                                                 </DropdownMenuItem>
                                             </>
@@ -188,38 +178,36 @@ export function FileDisplayArea({
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </div>
-                            {file.description && (
-                                <p className="text-sm text-muted-foreground">{file.description}</p>
-                            )}
+                            {file.description && <p className='text-muted-foreground text-sm'>{file.description}</p>}
                         </div>
                     ))}
                 </div>
             ) : (
-                <div className="rounded-md border">
+                <div className='rounded-md border'>
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead className="w-[40%]">Name</TableHead>
-                                <TableHead className="w-[20%]">Modified</TableHead>
-                                <TableHead className="w-[20%]">Size</TableHead>
-                                <TableHead className="w-[20%]">Actions</TableHead>
+                                <TableHead className='w-[40%]'>Name</TableHead>
+                                <TableHead className='w-[20%]'>Modified</TableHead>
+                                <TableHead className='w-[20%]'>Size</TableHead>
+                                <TableHead className='w-[20%]'>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {sortedFiles.map((file) => (
                                 <TableRow key={file.id}>
                                     <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <File className="h-4 w-4 text-primary/70" />
+                                        <div className='flex items-center gap-2'>
+                                            <File className='text-primary/70 h-4 w-4' />
                                             <span>{file.name}</span>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="text-muted-foreground">
+                                    <TableCell className='text-muted-foreground'>
                                         {formatDistanceToNow(new Date(file.updatedAt || Date.now()), {
-                                            addSuffix: true,
+                                            addSuffix: true
                                         })}
                                     </TableCell>
-                                    <TableCell className="text-muted-foreground">
+                                    <TableCell className='text-muted-foreground'>
                                         {file.size ? `${Math.round(file.size / 1024)} KB` : '-'}
                                     </TableCell>
                                     <TableCell>
@@ -233,4 +221,4 @@ export function FileDisplayArea({
             )}
         </div>
     );
-} 
+}
