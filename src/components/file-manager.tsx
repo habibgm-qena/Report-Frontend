@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import Image from 'next/image';
+
 import { createItem, deleteItem, getFolderContents, updateItem } from '@/app/api/endpoints/fileManager';
 import {
     Breadcrumb,
@@ -13,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { NotificationToaster, toast } from '@/components/ui/notification-toast';
+import { useSiteConfig } from '@/hooks/use-site-config';
 import { useGenericMethod } from '@/hooks/useGenericMethod';
 import $axios from '@/lib/axiosInstance';
 import { cn } from '@/lib/utils';
@@ -76,6 +79,8 @@ export function FileManager({ userRole }: FileManagerProps) {
     const [databases, setDatabases] = useState<Database[]>([]);
     const [selectedDatabase, setSelectedDatabase] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+
+    const { name, logo } = useSiteConfig();
 
     // Generic method hooks
     const {
@@ -706,19 +711,44 @@ export function FileManager({ userRole }: FileManagerProps) {
                         'bg-background border-border/10 relative flex flex-col overflow-hidden border-r shadow-lg transition-all duration-500 ease-in-out',
                         isSidebarCollapsed ? 'w-14' : 'w-80'
                     )}>
+                    {/* Logo and Name Section */}
+                    <div
+                        className={cn(
+                            'border-b bg-gray-50/50 transition-all duration-500',
+                            isSidebarCollapsed ? 'p-2' : 'p-4'
+                        )}>
+                        <div className='flex items-center gap-3'>
+                            <div
+                                className={cn(
+                                    'relative overflow-hidden rounded transition-all duration-500',
+                                    isSidebarCollapsed ? 'h-8 w-8' : `h-${logo.height} w-${logo.width}`
+                                )}>
+                                <Image
+                                    src={logo.src}
+                                    alt={logo.alt}
+                                    width={isSidebarCollapsed ? 32 : logo.width}
+                                    height={isSidebarCollapsed ? 32 : logo.height}
+                                    className='object-contain'
+                                    priority
+                                />
+                            </div>
+                            <span
+                                className={cn(
+                                    'truncate text-lg font-semibold text-gray-900 transition-all duration-500',
+                                    isSidebarCollapsed ? 'w-0 opacity-0' : 'opacity-100'
+                                )}>
+                                {name}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Toolbar Section */}
                     <div
                         className={cn(
                             'bg-muted/5 border-border/10 border-b transition-all duration-500',
                             isSidebarCollapsed ? 'px-2 py-3' : 'px-4 py-4'
                         )}>
                         <div className='flex items-center justify-between'>
-                            <div
-                                className={cn(
-                                    'flex items-center overflow-hidden transition-all duration-500',
-                                    isSidebarCollapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'
-                                )}>
-                                <h2 className='text-foreground/80 text-base font-medium'>File Explorer</h2>
-                            </div>
                             <div
                                 className={cn(
                                     'flex items-center gap-2 transition-all duration-500',
@@ -753,17 +783,13 @@ export function FileManager({ userRole }: FileManagerProps) {
                                     variant='ghost'
                                     size='icon'
                                     onClick={handleToggleSidebar}
-                                    className={cn(
-                                        'hover:bg-accent transition-all duration-300',
-                                        isSidebarCollapsed ? 'h-8 w-full' : ''
-                                    )}
+                                    className='hover:bg-accent transition-colors'
                                     title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
-                                    <ChevronLeft
-                                        className={cn(
-                                            'text-foreground/70 h-4 w-4 transition-transform duration-500',
-                                            isSidebarCollapsed && 'rotate-180'
-                                        )}
-                                    />
+                                    {isSidebarCollapsed ? (
+                                        <ChevronRight className='text-foreground/70 h-4 w-4' />
+                                    ) : (
+                                        <ChevronLeft className='text-foreground/70 h-4 w-4' />
+                                    )}
                                 </Button>
                             </div>
                         </div>
