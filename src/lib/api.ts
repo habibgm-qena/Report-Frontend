@@ -6,6 +6,7 @@ export type FileType = {
     name: string;
     type: 'file';
     sql?: string;
+    databaseId?: string;
 };
 
 export type FolderType = {
@@ -71,7 +72,11 @@ let mockFileSystem: FolderType[] = [
 const SIMULATED_DELAY = 1000; // ms
 
 // Helper to find an item and its parent
-const findItemRecursive = (items: FileSystemItem[], itemId: string, parent: FolderType | null = null): { item: FileSystemItem | null, parent: FolderType | null, index: number } => {
+const findItemRecursive = (
+    items: FileSystemItem[],
+    itemId: string,
+    parent: FolderType | null = null
+): { item: FileSystemItem | null; parent: FolderType | null; index: number } => {
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
         if (item.id === itemId) {
@@ -97,7 +102,6 @@ const findFolderRecursive = (items: FileSystemItem[], folderId: string): FolderT
     }
     return null;
 };
-
 
 export const fetchFileSystem = (): Promise<FolderType[]> => {
     console.log('[API] Fetching initial file system');
@@ -137,7 +141,10 @@ export const addFileSystemItem = (parentId: string, newItem: FileSystemItem): Pr
     });
 };
 
-export const updateFileSystemItem = (itemId: string, updatedItemData: Partial<FileType | FolderType>): Promise<FileSystemItem> => {
+export const updateFileSystemItem = (
+    itemId: string,
+    updatedItemData: Partial<FileType | FolderType>
+): Promise<FileSystemItem> => {
     console.log(`[API] Updating item: ${itemId}`, updatedItemData);
     return new Promise((resolve, reject) => {
         setTimeout(() => {
@@ -164,8 +171,9 @@ export const deleteFileSystemItem = (itemId: string): Promise<{ id: string }> =>
                 if (parent) {
                     parent.children.splice(index, 1);
                     resolve({ id: itemId });
-                } else { // Root folder deletion (optional, handle as needed)
-                    mockFileSystem = mockFileSystem.filter(rootItem => rootItem.id !== itemId) as FolderType[];
+                } else {
+                    // Root folder deletion (optional, handle as needed)
+                    mockFileSystem = mockFileSystem.filter((rootItem) => rootItem.id !== itemId) as FolderType[];
                     resolve({ id: itemId });
                 }
             } else {
@@ -173,4 +181,4 @@ export const deleteFileSystemItem = (itemId: string): Promise<{ id: string }> =>
             }
         }, SIMULATED_DELAY);
     });
-}; 
+};

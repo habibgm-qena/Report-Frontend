@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import $axios from '@/lib/axiosInstance';
+
 // Types
 type FileType = {
     id: string;
@@ -15,9 +17,40 @@ type FolderType = {
     children: (FileType | FolderType)[];
 };
 
+type BackendNodeType = {
+    id: string;
+    name: string;
+    description: string | null;
+    parent: string | null;
+    organization: string;
+    sql_query?: string;
+    children: BackendNodeType[];
+    type: 'file' | 'folder';
+};
+
+// Transform backend response to frontend format
+function transformBackendToFrontend(node: BackendNodeType): FileType | FolderType {
+    if (node.type === 'file') {
+        console.log('node', node);
+        return {
+            id: node.id,
+            name: node.name,
+            type: 'file',
+            sql: node.sql_query || '' // Assuming the first query contains the SQL
+        };
+    }
+
+    return {
+        id: node.id,
+        name: node.name,
+        type: 'folder',
+        children: (node.children || []).map((child: BackendNodeType) => transformBackendToFrontend(child))
+    };
+}
+
 // Mock database
-let fileSystem: { [key: string]: FolderType | FileType } = {
-    'root': {
+const fileSystem: { [key: string]: FolderType | FileType } = {
+    root: {
         id: 'root',
         name: 'Root',
         type: 'folder',
@@ -105,17 +138,23 @@ let fileSystem: { [key: string]: FolderType | FileType } = {
 // GET /api/folders?id=folderId
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id') || 'root';
+    const id = searchParams.get('id');
 
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+        const apiEndpoint = id && id !== 'root' ? `/nodes/${id}/` : '/nodes/';
+        // console.log('fetching folders from backend /api/folders', process.env.NEXT_PUBLIC_X_API_KEY);
+        const { data } = await $axios.get(apiEndpoint, {
+            headers: {
+                'X-API-KEY': process.env.NEXT_PUBLIC_X_API_KEY
+                // 'ROLE': 'admin'
+            }
+        });
 
-    const folder = fileSystem[id];
-    if (!folder) {
-        return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
+        return NextResponse.json(data);
+    } catch (error) {
+        console.log('error fetching folders from backend /api/folders', error);
+        return NextResponse.json({ error: 'Failed to fetch folders' }, { status: 500 });
     }
-
-    return NextResponse.json(folder);
 }
 
 // POST /api/folders
@@ -123,23 +162,45 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { parentId, item } = body;
 
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+        if (item.type === 'file') {
+            const { data } = await $axios.post(
+                `database/${item.databaseId}/queries/`,
+                {
+                    name: item.name,
+                    node: parentId === 'root' ? null : parentId,
+                    sql_query: item.sql,
+                },
+                {
+                    headers: {
+                        'x-api-key': process.env.NEXT_PUBLIC_X_API_KEY,
+                        ROLE: 'admin'
+                    }
+                }
+            );
 
-    const parentFolder = fileSystem[parentId];
-    if (!parentFolder || parentFolder.type !== 'folder') {
-        return NextResponse.json({ error: 'Parent folder not found' }, { status: 404 });
+            return NextResponse.json(data);
+        } else {
+            const { data } = await $axios.post(
+                '/nodes/',
+                {
+                    name: item.name,
+                    parent_id: parentId === 'root' ? null : parentId
+                },
+                {
+                    headers: {
+                        'x-api-key': process.env.NEXT_PUBLIC_X_API_KEY,
+                        ROLE: 'admin'
+                    }
+                }
+            );
+
+            return NextResponse.json(data);
+        }
+    } catch (error) {
+        console.log('error fetching folders from backend /api/folders', error);
+        return NextResponse.json({ error: (error as any).response.data }, { status: (error as any).response.status });
     }
-
-    // Add new item to fileSystem
-    if (item.type === 'folder') {
-        fileSystem[item.id] = { ...item, children: [] };
-    }
-    
-    // Add reference to parent's children
-    parentFolder.children.push(item);
-
-    return NextResponse.json(item);
 }
 
 // PATCH /api/folders
@@ -147,18 +208,19 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const { id, updates } = body;
 
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+        const { data } = await $axios.patch(`/nodes/${id}/`, updates, {
+            headers: {
+                'x-api-key': process.env.NEXT_PUBLIC_X_API_KEY,
+                ROLE: 'admin'
+            }
+        });
 
-    const item = fileSystem[id];
-    if (!item) {
-        return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+        return NextResponse.json(data);
+    } catch (error) {
+        console.log('error fetching folders from backend /api/folders', error);
+        return NextResponse.json({ error: (error as any).response.data }, { status: (error as any).response.status });
     }
-
-    // Update the item
-    Object.assign(item, updates);
-
-    return NextResponse.json(item);
 }
 
 // DELETE /api/folders?id=itemId
@@ -170,28 +232,17 @@ export async function DELETE(request: Request) {
         return NextResponse.json({ error: 'ID is required' }, { status: 400 });
     }
 
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+        const { data } = await $axios.delete(`/nodes/${id}/`, {
+            headers: {
+                'x-api-key': process.env.NEXT_PUBLIC_X_API_KEY,
+                ROLE: 'admin'
+            }
+        });
 
-    const item = fileSystem[id];
-    if (!item) {
-        return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+        return NextResponse.json(data);
+    } catch (error) {
+        console.log('error fetching folders from backend /api/folders', error);
+        return NextResponse.json({ error: (error as any).response.data }, { status: (error as any).response.status });
     }
-
-    // If it's a folder, check if it's empty
-    if (item.type === 'folder' && item.children.length > 0) {
-        return NextResponse.json({ error: 'Cannot delete non-empty folder' }, { status: 400 });
-    }
-
-    // Remove item from parent's children
-    Object.values(fileSystem).forEach(fsItem => {
-        if (fsItem.type === 'folder') {
-            fsItem.children = fsItem.children.filter(child => child.id !== id);
-        }
-    });
-
-    // Remove item from fileSystem
-    delete fileSystem[id];
-
-    return NextResponse.json({ success: true });
-} 
+}

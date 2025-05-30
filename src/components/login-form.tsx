@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 import { toast } from 'react-toastify';
+import { cpClientRequest } from '@/lib/cpClient';
 
 export default function LoginForm() {
     const [email, setEmail] = useState('');
@@ -25,14 +26,18 @@ export default function LoginForm() {
 
         // Mock authentication
         try {
-            await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
+            const response = await cpClientRequest({ url: '/token/', method: 'POST', data: { username: email, password } });
+            console.log(response.data);
 
-            if (email && password) {
-                toast.success('Login successful');
-                router.push('/dashboard');
-            } else {
-                throw new Error('Invalid credentials');
+            if (response.status !== 200) {
+                throw new Error('Login failed');
             }
+
+            localStorage.setItem('access_token', response.data.access);
+            localStorage.setItem('refresh_token', response.data.refresh);
+
+            toast.success('Login successful');
+            router.push('/admin/dashboard');
         } catch (error) {
             toast.error('Please check your credentials and try again.');
         } finally {
@@ -49,14 +54,14 @@ export default function LoginForm() {
                 <form onSubmit={handleSubmit} className='space-y-4'>
                     <div className='space-y-2'>
                         <Label htmlFor='email' className='text-black'>
-                            Email
+                            Username
                         </Label>
                         <Input
                             id='email'
-                            type='email'
+                            type='text'
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder='Enter your email'
+                            placeholder='Enter your username'
                             required
                             className='border-gray-300 focus:border-black'
                         />

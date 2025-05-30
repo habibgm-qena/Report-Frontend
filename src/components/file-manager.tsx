@@ -1,17 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useAtom } from 'jotai';
-import { SimpleTreeView as TreeView } from '@mui/x-tree-view/SimpleTreeView';
-import { ChevronDown, ChevronRight, File, Loader2, Folder, ChevronLeft, FolderInput, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+
 import { createItem, deleteItem, getFolderContents, updateItem } from '@/app/api/endpoints/fileManager';
-import { useGenericMethod } from '@/hooks/useGenericMethod';
-import { FileType, FolderType } from '@/services/folderService';
-import { FileTreeItem } from './FileTreeItem';
-import { FileActions } from './FileActions';
-import { FileDialog } from './FileDialog';
-import { DeleteDialog } from './DeleteDialog';
-import { FileDisplayArea } from './FileDisplayArea';
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -20,22 +11,38 @@ import {
     BreadcrumbSeparator
 } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { NotificationToaster, toast } from '@/components/ui/notification-toast';
+import { useGenericMethod } from '@/hooks/useGenericMethod';
+import $axios from '@/lib/axiosInstance';
 import { cn } from '@/lib/utils';
+import { FileType, FolderType } from '@/services/folderService';
 import {
+    TreeNode,
+    ViewMode,
+    breadcrumbsAtom,
     fileManagerAtom,
     selectedFolderAtom,
-    breadcrumbsAtom,
-    treeActionsAtom,
-    TreeNode,
-    viewModeAtom,
     sortByAtom,
     sortOrderAtom,
-    ViewMode
+    treeActionsAtom,
+    viewModeAtom
 } from '@/store/fileManager';
-import { toast } from "@/components/ui/notification-toast"
-import { ConfirmDialog } from "@/components/ui/confirm-dialog"
-import { NotificationToaster } from "@/components/ui/notification-toast"
+import { SimpleTreeView as TreeView } from '@mui/x-tree-view/SimpleTreeView';
+
+import { DeleteDialog } from './DeleteDialog';
+import { FileActions } from './FileActions';
+import { FileDialog } from './FileDialog';
+import { FileDisplayArea } from './FileDisplayArea';
+import { FileTreeItem } from './FileTreeItem';
 import { ViewSortControls } from './ViewSortControls';
+import { useAtom } from 'jotai';
+import { ChevronDown, ChevronLeft, ChevronRight, File, Folder, FolderInput, Loader2, RefreshCw } from 'lucide-react';
+
+interface Database {
+    id: string;
+    name: string;
+}
 
 interface FileManagerProps {
     userRole: 'admin' | 'user';
@@ -66,15 +73,26 @@ export function FileManager({ userRole }: FileManagerProps) {
     const [navigationHistory, setNavigationHistory] = useState<string[]>(['root']);
     const [currentHistoryIndex, setCurrentHistoryIndex] = useState(0);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    const [databases, setDatabases] = useState<Database[]>([]);
+    const [selectedDatabase, setSelectedDatabase] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     // Generic method hooks
-    const { data: rootFolder, loading: loadingRoot, handleAction: fetchRoot } = useGenericMethod({
+    const {
+        data: rootFolder,
+        loading: loadingRoot,
+        handleAction: fetchRoot
+    } = useGenericMethod({
         method: 'GET',
         apiMethod: getFolderContents,
         successMessage: 'Root folder loaded successfully'
     });
 
-    const { data: currentFolder, loading: loadingFolder, handleAction: fetchFolder } = useGenericMethod({
+    const {
+        data: currentFolder,
+        loading: loadingFolder,
+        handleAction: fetchFolder
+    } = useGenericMethod({
         method: 'GET',
         apiMethod: getFolderContents,
         successMessage: 'Folder contents loaded successfully'
@@ -115,7 +133,7 @@ export function FileManager({ userRole }: FileManagerProps) {
             try {
                 const response = await getFolderContents({ id: state.selectedFolder.id });
                 const folder = response.data;
-                setState(prev => {
+                setState((prev) => {
                     const newFolderTree = { ...prev.treeData };
                     newFolderTree[folder.id] = {
                         ...folder,
@@ -148,11 +166,11 @@ export function FileManager({ userRole }: FileManagerProps) {
     // Handle expand/collapse
     const handleExpandedChange = async (_event: React.SyntheticEvent | null, itemIds: string[]) => {
         const currentExpanded = state.expanded;
-        const newlyExpanded = itemIds.filter(id => !currentExpanded.includes(id));
-        const collapsed = currentExpanded.filter(id => !itemIds.includes(id));
+        const newlyExpanded = itemIds.filter((id) => !currentExpanded.includes(id));
+        const collapsed = currentExpanded.filter((id) => !itemIds.includes(id));
 
         // Handle collapse
-        collapsed.forEach(id => {
+        collapsed.forEach((id) => {
             dispatch({ type: 'COLLAPSE_FOLDER', payload: { folderId: id } });
         });
 
@@ -169,15 +187,15 @@ export function FileManager({ userRole }: FileManagerProps) {
     // Handle folder selection
     const handleSelectedChange = async (_event: React.SyntheticEvent | null, itemIds: string | null) => {
         if (!itemIds) return;
-        
+
         const folder = state.treeData[itemIds];
         if (!folder) return;
 
         // Update breadcrumbs immediately before loading folder contents
         await updateBreadcrumbs(folder);
-        
+
         dispatch({ type: 'SELECT_FOLDER', payload: { folder } });
-        
+
         if (!folder.isLoaded) {
             await loadFolder(itemIds);
         }
@@ -194,7 +212,7 @@ export function FileManager({ userRole }: FileManagerProps) {
         if (asRoot) {
             setRootFolderId(folderId);
             dispatch({ type: 'SELECT_FOLDER', payload: { folder } });
-            
+
             if (!folder.isLoaded) {
                 await loadFolder(folderId);
             }
@@ -206,7 +224,7 @@ export function FileManager({ userRole }: FileManagerProps) {
                 newOpenFolders.add(folderId);
             }
             setOpenFolders(newOpenFolders);
-            
+
             dispatch({ type: 'SELECT_FOLDER', payload: { folder } });
             if (!folder.isLoaded) {
                 await loadFolder(folderId);
@@ -263,7 +281,7 @@ export function FileManager({ userRole }: FileManagerProps) {
     // Update breadcrumbs helper
     const updateBreadcrumbs = async (currentFolder: TreeNode) => {
         const path = [];
-        
+
         if (currentFolder.id === 'root') {
             path.push({ id: 'root', name: 'Root' });
         } else {
@@ -276,7 +294,7 @@ export function FileManager({ userRole }: FileManagerProps) {
                 let parentNode: TreeNode | null = null;
                 for (const [, folder] of Object.entries(state.treeData)) {
                     if (folder.type === 'folder' && folder.children) {
-                        const hasChild = folder.children.some(child => child.id === folderId);
+                        const hasChild = folder.children.some((child) => child.id === folderId);
                         if (hasChild) {
                             parentNode = folder;
                             break;
@@ -300,14 +318,15 @@ export function FileManager({ userRole }: FileManagerProps) {
 
             // Add the path to breadcrumbs (root first)
             for (const folder of pathToRoot) {
-                if (folder) { // Ensure folder is not null/undefined
+                if (folder) {
+                    // Ensure folder is not null/undefined
                     path.push({ id: folder.id, name: folder.name });
                 }
             }
             // Add current folder at the end
             path.push({ id: currentFolder.id, name: currentFolder.name });
         }
-        
+
         setBreadcrumbs(path);
     };
 
@@ -333,50 +352,141 @@ export function FileManager({ userRole }: FileManagerProps) {
         }
     };
 
-    // Save a new file
-    const handleSaveFile = () => {
-        if (!state.selectedFolder) return;
-
-        const newFile: Partial<FileType> = {
-            id: isEditMode && state.selectedFile ? state.selectedFile.id : `file-${Date.now()}`,
-            name: newFileName,
-            type: 'file',
-            sql: newFileSQL,
-            updatedAt: new Date().toISOString()
+    // Fetch databases
+    useEffect(() => {
+        const fetchDatabases = async () => {
+            try {
+                const { data } = await $axios.get('/database/', {
+                    headers: {
+                        'X-API-KEY': process.env.NEXT_PUBLIC_X_API_KEY,
+                        ROLE: 'admin'
+                    }
+                });
+                setDatabases(data);
+            } catch (error) {
+                console.error('Error fetching databases:', error);
+                toast.error('Failed to fetch databases');
+            }
         };
 
-        if (isEditMode && state.selectedFile) {
-            updateExistingItem({ id: state.selectedFile.id, updates: newFile }).then(() => {
+        fetchDatabases();
+    }, []);
+
+    const handleAddDatabase = async (newDatabase: { name: string; id: string }) => {
+        try {
+            setDatabases((prev) => [...prev, { id: newDatabase.id, name: newDatabase.name }]);
+            toast.success('Database added successfully');
+        } catch (error) {
+            console.error('Error adding database:', error);
+            toast.error('Failed to add database');
+        }
+    };
+
+    // Update handleSaveFile to include database information
+    const handleSaveFile = async () => {
+        if (!state.selectedFolder) return;
+        setIsSaving(true);
+
+        try {
+            if (isEditMode && state.selectedFile) {
+                console.log('state.selectedFile: ', state.selectedFile);
+
+                const { data } = await $axios.patch(
+                    `/queries/${state.selectedFile.id}/`,
+                    {
+                        sql_query: newFileSQL,
+                        name: newFileName
+                    },
+                    {
+                        headers: {
+                            'X-API-KEY': process.env.NEXT_PUBLIC_X_API_KEY,
+                            ROLE: userRole
+                        }
+                    }
+                );
+                toast.success('File updated successfully');
                 setIsAddFileDialogOpen(false);
-                loadFolder(state.selectedFolder!.id);
-            });
-        } else {
-            createNewItem({ parentId: state.selectedFolder.id, item: newFile }).then(() => {
-                setIsAddFileDialogOpen(false);
-                loadFolder(state.selectedFolder!.id);
-            });
+                await loadFolder(state.selectedFolder.id);
+            } else {
+                const newFile: Partial<FileType> = {
+                    id: isEditMode && state.selectedFile ? state.selectedFile.id : `file-${Date.now()}`,
+                    name: newFileName,
+                    type: 'file',
+                    sql: newFileSQL,
+                    updatedAt: new Date().toISOString(),
+                    databaseId: selectedDatabase // Add database ID to the file
+                };
+
+                if (isEditMode && state.selectedFile) {
+                    await updateExistingItem({ id: state.selectedFile.id, updates: newFile });
+                    setIsAddFileDialogOpen(false);
+                    await loadFolder(state.selectedFolder.id);
+                } else {
+                    await createNewItem({ parentId: state.selectedFolder.id, item: newFile });
+                    setIsAddFileDialogOpen(false);
+                    await loadFolder(state.selectedFolder.id);
+                }
+                setSelectedDatabase(''); // Reset selected database after save
+            }
+        } catch (error) {
+            console.error('Error saving file:', error);
+            toast.error('Failed to save file');
+        } finally {
+            setIsSaving(false);
         }
     };
 
     // Handle file actions
-    const handleFileAction = (action: 'edit' | 'delete' | 'download', file: FileType) => {
+    const handleFileAction = async (action: 'edit' | 'delete' | 'download', file: FileType) => {
         switch (action) {
             case 'edit':
-                setState(prev => ({ ...prev, selectedFile: file }));
+                setState((prev) => ({ ...prev, selectedFile: file }));
+                console.log('file: ', file);
                 setNewFileName(file.name);
-                setNewFileSQL(file.sql || '');
+                setNewFileSQL(file.sql || (file as any).sql_query || '');
                 setIsEditMode(true);
                 setIsAddFileDialogOpen(true);
                 break;
-            case 'delete':
-                setState(prev => ({ ...prev, selectedFile: file }));
-                setIsDeleteDialogOpen(true);
+            case 'delete': {
+                const { data } = await $axios.delete(`/queries/${file.id}/`, {
+                    headers: {
+                        'X-API-KEY': process.env.NEXT_PUBLIC_X_API_KEY,
+                        ROLE: userRole
+                    }
+                });
+                if (state.selectedFolder) {
+                    // Remove the deleted file from the current folder's children
+                    setState((prev) => ({
+                        ...prev,
+                        selectedFolder: {
+                            ...prev.selectedFolder!,
+                            children: prev.selectedFolder!.children.filter((item) => item.id !== file.id)
+                        }
+                    }));
+                }
+                toast.success('File deleted successfully');
                 break;
-            case 'download':
-                toast.success(`File "${file.name}" download started`, {
-                    description: "Your file will be downloaded shortly."
+            }
+            case 'download': {
+                const { data } = await $axios.get(`/queries/${file.id}/execute`, {
+                    headers: {
+                        'X-API-KEY': process.env.NEXT_PUBLIC_X_API_KEY,
+                        ROLE: userRole
+                    }
+                });
+                const url = window.URL.createObjectURL(new Blob([data], { type: 'text/csv' }));
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${file.name}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+                toast.success(`File "${file.name}.csv" download started`, {
+                    description: 'Your file will be downloaded shortly.'
                 });
                 break;
+            }
         }
     };
 
@@ -404,7 +514,7 @@ export function FileManager({ userRole }: FileManagerProps) {
     const handleFolderDelete = async (folderId: string) => {
         const folder = state.treeData[folderId];
         if (!folder) return;
-        
+
         setFolderToDelete(folder);
         setIsDeleteDialogOpen(true);
     };
@@ -414,7 +524,7 @@ export function FileManager({ userRole }: FileManagerProps) {
 
         try {
             await deleteExistingItem({ id: folderToDelete.id });
-            toast.success("Folder deleted successfully");
+            toast.success('Folder deleted successfully');
 
             if (state.selectedFolder?.id === folderToDelete.id) {
                 // If we deleted the selected folder, select its parent
@@ -425,8 +535,8 @@ export function FileManager({ userRole }: FileManagerProps) {
                 loadFolder(state.selectedFolder?.id || 'root');
             }
         } catch (error) {
-            toast.error("Failed to delete folder", {
-                description: "An error occurred while deleting the folder."
+            toast.error('Failed to delete folder', {
+                description: 'An error occurred while deleting the folder.'
             });
         }
     };
@@ -444,7 +554,7 @@ export function FileManager({ userRole }: FileManagerProps) {
                 const isExpanded = state.expanded.includes(node.id);
                 const isOpen = openFolders.has(node.id);
                 const isSelected = state.selectedFolder?.id === node.id;
-                const treeNode = state.treeData[node.id] || node as TreeNode;
+                const treeNode = state.treeData[node.id] || (node as TreeNode);
                 const children = treeNode.children || [];
 
                 return (
@@ -462,8 +572,7 @@ export function FileManager({ userRole }: FileManagerProps) {
                         onRefresh={handleFolderRefresh}
                         onSelect={handleFolderSelect}
                         onToggle={handleFolderToggle}
-                        onOpenFolder={handleOpenFolder}
-                    >
+                        onOpenFolder={handleOpenFolder}>
                         {isExpanded && children.length > 0 && renderTree(children)}
                     </FileTreeItem>
                 );
@@ -472,20 +581,26 @@ export function FileManager({ userRole }: FileManagerProps) {
         });
     };
 
-    const handleViewModeChange = useCallback((mode: ViewMode) => {
-        setViewMode(mode);
-    }, [setViewMode]);
+    const handleViewModeChange = useCallback(
+        (mode: ViewMode) => {
+            setViewMode(mode);
+        },
+        [setViewMode]
+    );
 
-    const handleSortChange = useCallback((newSortBy: 'name' | 'date' | 'size') => {
-        setSortBy(newSortBy);
-    }, [setSortBy]);
+    const handleSortChange = useCallback(
+        (newSortBy: 'name' | 'date' | 'size') => {
+            setSortBy(newSortBy);
+        },
+        [setSortBy]
+    );
 
     const handleSortOrderChange = useCallback(() => {
         setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     }, [sortOrder, setSortOrder]);
 
     const handleCollapseAll = () => {
-        setState(prev => ({
+        setState((prev) => ({
             ...prev,
             expanded: ['root'] // Only keep root expanded
         }));
@@ -532,80 +647,85 @@ export function FileManager({ userRole }: FileManagerProps) {
 
     return (
         <>
-            <div className="flex h-full gap-6 p-6">
+            <div className='flex h-full gap-6 p-6'>
                 {/* Left sidebar with tree view */}
-                <div className={cn(
-                    "bg-background border-r border-border/10 shadow-lg overflow-hidden transition-all duration-500 ease-in-out flex flex-col relative",
-                    isSidebarCollapsed ? "w-14" : "w-80"
-                )}>
-                    <div className={cn(
-                        "bg-muted/5 border-b border-border/10 transition-all duration-500",
-                        isSidebarCollapsed ? "px-2 py-3" : "px-4 py-4"
+                <div
+                    className={cn(
+                        'bg-background border-border/10 relative flex flex-col overflow-hidden border-r shadow-lg transition-all duration-500 ease-in-out',
+                        isSidebarCollapsed ? 'w-14' : 'w-80'
                     )}>
-                        <div className="flex items-center justify-between">
-                            <div className={cn(
-                                "flex items-center transition-all duration-500 overflow-hidden",
-                                isSidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
-                            )}>
-                                <h2 className="text-base font-medium text-foreground/80">
-                                    File Explorer
-                                </h2>
-                            </div>
-                            <div className={cn(
-                                "flex items-center gap-2 transition-all duration-500",
-                                isSidebarCollapsed ? "ml-0 justify-center w-full" : "ml-auto"
-                            )}>
-                                <div className={cn(
-                                    "flex items-center gap-2 transition-all duration-500",
-                                    isSidebarCollapsed ? "scale-0 w-0" : "scale-100 w-auto"
+                    <div
+                        className={cn(
+                            'bg-muted/5 border-border/10 border-b transition-all duration-500',
+                            isSidebarCollapsed ? 'px-2 py-3' : 'px-4 py-4'
+                        )}>
+                        <div className='flex items-center justify-between'>
+                            <div
+                                className={cn(
+                                    'flex items-center overflow-hidden transition-all duration-500',
+                                    isSidebarCollapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'
                                 )}>
+                                <h2 className='text-foreground/80 text-base font-medium'>File Explorer</h2>
+                            </div>
+                            <div
+                                className={cn(
+                                    'flex items-center gap-2 transition-all duration-500',
+                                    isSidebarCollapsed ? 'ml-0 w-full justify-center' : 'ml-auto'
+                                )}>
+                                <div
+                                    className={cn(
+                                        'flex items-center gap-2 transition-all duration-500',
+                                        isSidebarCollapsed ? 'w-0 scale-0' : 'w-auto scale-100'
+                                    )}>
                                     <Button
-                                        variant="ghost"
-                                        size="icon"
+                                        variant='ghost'
+                                        size='icon'
                                         onClick={handleCollapseAll}
-                                        className="hover:bg-accent transition-colors"
-                                        title="Collapse all folders"
-                                    >
-                                        <FolderInput className="h-4 w-4 text-foreground/70" />
+                                        className='hover:bg-accent transition-colors'
+                                        title='Collapse all folders'>
+                                        <FolderInput className='text-foreground/70 h-4 w-4' />
                                     </Button>
                                     <Button
-                                        variant="ghost"
-                                        size="icon"
+                                        variant='ghost'
+                                        size='icon'
                                         onClick={handleRefreshAll}
                                         disabled={isLoading}
-                                        className="hover:bg-accent transition-colors"
-                                        title="Refresh all folders"
-                                    >
-                                        <RefreshCw className={cn("h-4 w-4 text-foreground/70", isLoading && "animate-spin")} />
+                                        className='hover:bg-accent transition-colors'
+                                        title='Refresh all folders'>
+                                        <RefreshCw
+                                            className={cn('text-foreground/70 h-4 w-4', isLoading && 'animate-spin')}
+                                        />
                                     </Button>
                                 </div>
                                 <Button
-                                    variant="ghost"
-                                    size="icon"
+                                    variant='ghost'
+                                    size='icon'
                                     onClick={handleToggleSidebar}
                                     className={cn(
-                                        "hover:bg-accent transition-all duration-300",
-                                        isSidebarCollapsed ? "w-full h-8" : ""
+                                        'hover:bg-accent transition-all duration-300',
+                                        isSidebarCollapsed ? 'h-8 w-full' : ''
                                     )}
-                                    title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                                >
-                                    <ChevronLeft className={cn(
-                                        "h-4 w-4 text-foreground/70 transition-transform duration-500",
-                                        isSidebarCollapsed && "rotate-180"
-                                    )} />
+                                    title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+                                    <ChevronLeft
+                                        className={cn(
+                                            'text-foreground/70 h-4 w-4 transition-transform duration-500',
+                                            isSidebarCollapsed && 'rotate-180'
+                                        )}
+                                    />
                                 </Button>
                             </div>
                         </div>
                     </div>
-                    
-                    <div className={cn(
-                        "transition-all duration-500 ease-in-out",
-                        isSidebarCollapsed ? "opacity-0 scale-95" : "opacity-100 scale-100"
-                    )}>
-                        <div className="p-2 flex-1 overflow-hidden hover:overflow-auto transition-all duration-200">
+
+                    <div
+                        className={cn(
+                            'transition-all duration-500 ease-in-out',
+                            isSidebarCollapsed ? 'scale-95 opacity-0' : 'scale-100 opacity-100'
+                        )}>
+                        <div className='flex-1 overflow-hidden p-2 transition-all duration-200 hover:overflow-auto'>
                             {isLoading ? (
-                                <div className="flex items-center justify-center p-8">
-                                    <Loader2 className="h-5 w-5 animate-spin text-foreground/50" />
+                                <div className='flex items-center justify-center p-8'>
+                                    <Loader2 className='text-foreground/50 h-5 w-5 animate-spin' />
                                 </div>
                             ) : (
                                 <TreeView
@@ -622,7 +742,7 @@ export function FileManager({ userRole }: FileManagerProps) {
                                         expandIcon: () => <></>,
                                         collapseIcon: () => <></>
                                     }}
-                                    className="overflow-auto scrollbar-thin scrollbar-thumb-accent/50 scrollbar-track-transparent">
+                                    className='scrollbar-thin scrollbar-thumb-accent/50 scrollbar-track-transparent overflow-auto'>
                                     {state.treeData[rootFolderId] && renderTree([state.treeData[rootFolderId]])}
                                 </TreeView>
                             )}
@@ -630,45 +750,34 @@ export function FileManager({ userRole }: FileManagerProps) {
                     </div>
 
                     {/* Minimal Actions in Collapsed State */}
-                    <div className={cn(
-                        "absolute inset-x-0 top-16 transition-all duration-500 flex flex-col items-center gap-2 px-2",
-                        isSidebarCollapsed ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
-                    )}>
+                    <div
+                        className={cn(
+                            'absolute inset-x-0 top-16 flex flex-col items-center gap-2 px-2 transition-all duration-500',
+                            isSidebarCollapsed
+                                ? 'translate-y-0 opacity-100'
+                                : 'pointer-events-none -translate-y-4 opacity-0'
+                        )}>
                         <Button
-                            variant="ghost"
-                            size="icon"
-                            className="w-full h-9 hover:bg-accent transition-colors"
+                            variant='ghost'
+                            size='icon'
+                            className='hover:bg-accent h-9 w-full transition-colors'
                             onClick={handleRefreshAll}
-                            title="Refresh All"
-                        >
-                            <RefreshCw className={cn(
-                                "h-4 w-4 text-foreground/70",
-                                isLoading && "animate-spin"
-                            )} />
+                            title='Refresh All'>
+                            <RefreshCw className={cn('text-foreground/70 h-4 w-4', isLoading && 'animate-spin')} />
                         </Button>
                     </div>
                 </div>
 
                 {/* Main content area */}
-                <div className="flex-1 flex flex-col space-y-4">
-                    <div className="flex items-center justify-between p-4 border-b">
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-1">
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={navigateBack}
-                                    disabled={!canGoBack}
-                                >
-                                    <ChevronLeft className="h-4 w-4" />
+                <div className='flex flex-1 flex-col space-y-4'>
+                    <div className='flex items-center justify-between border-b p-4'>
+                        <div className='flex items-center gap-4'>
+                            <div className='flex items-center gap-1'>
+                                <Button variant='ghost' size='icon' onClick={navigateBack} disabled={!canGoBack}>
+                                    <ChevronLeft className='h-4 w-4' />
                                 </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={navigateForward}
-                                    disabled={!canGoForward}
-                                >
-                                    <ChevronRight className="h-4 w-4" />
+                                <Button variant='ghost' size='icon' onClick={navigateForward} disabled={!canGoForward}>
+                                    <ChevronRight className='h-4 w-4' />
                                 </Button>
                             </div>
 
@@ -679,10 +788,10 @@ export function FileManager({ userRole }: FileManagerProps) {
                                             <BreadcrumbLink
                                                 onClick={() => handleSelectedChange(null, crumb.id)}
                                                 className={cn(
-                                                    'cursor-pointer hover:text-primary',
-                                                    state.selectedFolder?.id === crumb.id && 'font-semibold text-primary'
-                                                )}
-                                            >
+                                                    'hover:text-primary cursor-pointer',
+                                                    state.selectedFolder?.id === crumb.id &&
+                                                        'text-primary font-semibold'
+                                                )}>
                                                 {crumb.name}
                                             </BreadcrumbLink>
                                             {index < state.breadcrumbs.length - 1 && <BreadcrumbSeparator />}
@@ -692,7 +801,7 @@ export function FileManager({ userRole }: FileManagerProps) {
                             </Breadcrumb>
                         </div>
 
-                        <div className="flex items-center gap-4">
+                        <div className='flex items-center gap-4'>
                             <ViewSortControls
                                 viewMode={viewMode}
                                 sortBy={sortBy}
@@ -703,19 +812,19 @@ export function FileManager({ userRole }: FileManagerProps) {
                             />
 
                             {userRole === 'admin' && state.selectedFolder && (
-                                <div className="flex gap-2">
+                                <div className='flex gap-2'>
                                     <Button
-                                        variant="outline"
-                                        size="sm"
+                                        variant='outline'
+                                        size='sm'
                                         onClick={() => handleAddItem(state.selectedFolder!.id, 'folder')}>
-                                        <Folder className="mr-2 h-4 w-4" />
+                                        <Folder className='mr-2 h-4 w-4' />
                                         New Folder
                                     </Button>
                                     <Button
-                                        variant="outline"
-                                        size="sm"
+                                        variant='outline'
+                                        size='sm'
                                         onClick={() => handleAddItem(state.selectedFolder!.id, 'file')}>
-                                        <File className="mr-2 h-4 w-4" />
+                                        <File className='mr-2 h-4 w-4' />
                                         New File
                                     </Button>
                                 </div>
@@ -740,14 +849,21 @@ export function FileManager({ userRole }: FileManagerProps) {
             {/* Dialogs */}
             <FileDialog
                 isOpen={isAddFileDialogOpen}
-                onClose={() => setIsAddFileDialogOpen(false)}
+                onClose={() => {
+                    setIsAddFileDialogOpen(false);
+                    setSelectedDatabase(''); // Reset selected database when closing
+                }}
                 onSave={handleSaveFile}
                 isEditMode={isEditMode}
                 fileName={newFileName}
                 fileSQL={newFileSQL}
                 onFileNameChange={setNewFileName}
                 onFileSQLChange={setNewFileSQL}
-                isSaving={false}
+                isSaving={isSaving}
+                databases={databases}
+                selectedDatabase={selectedDatabase}
+                onDatabaseChange={setSelectedDatabase}
+                onAddDatabase={handleAddDatabase}
             />
 
             <ConfirmDialog
@@ -757,11 +873,11 @@ export function FileManager({ userRole }: FileManagerProps) {
                     setFolderToDelete(null);
                 }}
                 onConfirm={confirmFolderDelete}
-                title="Delete Folder"
+                title='Delete Folder'
                 description={`Are you sure you want to delete "${folderToDelete?.name}"? This action cannot be undone and all contents will be permanently deleted.`}
-                confirmText="Delete"
-                cancelText="Cancel"
-                variant="destructive"
+                confirmText='Delete'
+                cancelText='Cancel'
+                variant='destructive'
             />
 
             <NotificationToaster />
