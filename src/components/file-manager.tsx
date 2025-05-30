@@ -124,7 +124,7 @@ export function FileManager({ userRole }: FileManagerProps) {
         successMessage: 'Item deleted successfully',
         onSuccess: () => {
             setIsDeleteDialogOpen(false);
-            refreshCurrentFolder();
+            fetchRoot({ id: 'root' }); // Refresh the entire tree from root
         }
     });
 
