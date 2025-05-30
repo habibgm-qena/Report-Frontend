@@ -8,6 +8,7 @@ export interface FileType {
     updatedAt?: string;
     size?: number;
     description?: string;
+    databaseId?: string;
 }
 
 export interface FolderType {
