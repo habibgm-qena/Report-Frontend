@@ -437,63 +437,115 @@ export function FileManager({ userRole }: FileManagerProps) {
     };
 
     // Handle file actions
-    const handleFileAction = async (action: 'edit' | 'delete' | 'download', file: FileType) => {
-        switch (action) {
-            case 'edit':
-                setState((prev) => ({ ...prev, selectedFile: file }));
-                console.log('file: ', file);
-                setNewFileName(file.name);
-                setNewFileSQL(file.sql || (file as any).sql_query || '');
-                setIsEditMode(true);
-                setIsAddFileDialogOpen(true);
-                break;
-            case 'delete': {
-                const { data } = await $axios.delete(`/queries/${file.id}/`, {
-                    headers: {
-                        'X-API-KEY': process.env.NEXT_PUBLIC_X_API_KEY,
-                        ROLE: userRole
-                    }
-                });
-                if (state.selectedFolder) {
-                    // Remove the deleted file from the current folder's children
-                    setState((prev) => ({
-                        ...prev,
-                        selectedFolder: {
-                            ...prev.selectedFolder!,
-                            children: prev.selectedFolder!.children.filter((item) => item.id !== file.id)
+    const handleFileAction = async (
+        action: 'edit' | 'delete' | 'download',
+        file: FileType,
+        event?: React.MouseEvent
+    ) => {
+        // Stop event propagation if event is provided
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        try {
+            switch (action) {
+                case 'edit':
+                    setState((prev) => ({ ...prev, selectedFile: file }));
+                    setNewFileName(file.name);
+                    setNewFileSQL(file.sql || (file as any).sql_query || '');
+                    setIsEditMode(true);
+                    setIsAddFileDialogOpen(true);
+                    break;
+                case 'delete': {
+                    const { data } = await $axios.delete(`/queries/${file.id}/`, {
+                        headers: {
+                            'X-API-KEY': process.env.NEXT_PUBLIC_X_API_KEY,
+                            ROLE: userRole
                         }
-                    }));
-                }
-                toast.success('File deleted successfully');
-                break;
-            }
-            case 'download': {
-                const { data } = await $axios.get(`/queries/${file.id}/execute`, {
-                    headers: {
-                        'X-API-KEY': process.env.NEXT_PUBLIC_X_API_KEY,
-                        ROLE: userRole
+                    });
+                    if (state.selectedFolder) {
+                        setState((prev) => ({
+                            ...prev,
+                            selectedFile: null, // Clear selected file
+                            selectedFolder: {
+                                ...prev.selectedFolder!,
+                                children: prev.selectedFolder!.children.filter((item) => item.id !== file.id)
+                            }
+                        }));
                     }
-                });
-                const url = window.URL.createObjectURL(new Blob([data], { type: 'text/csv' }));
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${file.name}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
-                toast.success(`File "${file.name}.csv" download started`, {
-                    description: 'Your file will be downloaded shortly.'
-                });
-                break;
+                    toast.success('File deleted successfully');
+                    break;
+                }
+                case 'download': {
+                    const { data } = await $axios.get(`/queries/${file.id}/execute`, {
+                        headers: {
+                            'X-API-KEY': process.env.NEXT_PUBLIC_X_API_KEY,
+                            ROLE: userRole
+                        }
+                    });
+                    const url = window.URL.createObjectURL(new Blob([data], { type: 'text/csv' }));
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${file.name}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                    toast.success(`File "${file.name}.csv" download started`, {
+                        description: 'Your file will be downloaded shortly.'
+                    });
+                    break;
+                }
             }
+        } catch (error) {
+            console.error('Error in handleFileAction:', error);
+            toast.error('An error occurred while performing the action');
         }
     };
 
     // Handle folder rename
     const handleFolderRename = async (id: string, newName: string) => {
-        await updateExistingItem({ id, updates: { name: newName } });
-        loadFolder(id);
+        try {
+            await updateExistingItem({ id, updates: { name: newName } });
+
+            // Update the tree data with the new name
+            setState((prev) => ({
+                ...prev,
+                treeData: {
+                    ...prev.treeData,
+                    [id]: {
+                        ...prev.treeData[id],
+                        name: newName
+                    }
+                }
+            }));
+
+            // If this is the selected folder, update breadcrumbs
+            if (state.selectedFolder?.id === id) {
+                const updatedBreadcrumbs = state.breadcrumbs.map((crumb: { id: string; name: string }) =>
+                    crumb.id === id ? { ...crumb, name: newName } : crumb
+                );
+                setBreadcrumbs(updatedBreadcrumbs);
+            }
+
+            // Refresh the parent folder to ensure consistent state
+            const folder = state.treeData[id];
+            if (folder && folder.parentId) {
+                await loadFolder(folder.parentId);
+            } else {
+                // If it's the root folder or no parent found, refresh the current folder
+                await loadFolder(id);
+            }
+
+            toast.success('Folder renamed successfully');
+        } catch (error) {
+            console.error('Error renaming folder:', error);
+            toast.error('Failed to rename folder');
+
+            // Refresh the folder to ensure consistent state
+            await loadFolder(id);
+        }
     };
 
     // Handle folder toggle (expand/collapse)

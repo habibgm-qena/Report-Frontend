@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import CreateDatabaseModal from '@/components/create-database-modal';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -15,7 +16,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { FileType } from '@/services/folderService';
 
-import CreateDatabaseModal from '@/components/create-database-modal';
 import { Loader2, Plus } from 'lucide-react';
 
 interface Database {
@@ -56,10 +56,18 @@ export function FileDialog({
 }: FileDialogProps) {
     const [isCreateDatabaseModalOpen, setIsCreateDatabaseModalOpen] = useState(false);
 
+    // Handle dialog close with cleanup
+    const handleDialogClose = () => {
+        // Reset all local state
+        setIsCreateDatabaseModalOpen(false);
+        // Call the parent's onClose handler
+        onClose();
+    };
+
     return (
         <>
-            <Dialog open={isOpen} onOpenChange={onClose}>
-                <DialogContent>
+            <Dialog open={isOpen} onOpenChange={handleDialogClose}>
+                <DialogContent className='max-w-2xl'>
                     <DialogHeader>
                         <DialogTitle>{isEditMode ? 'Edit File' : 'Add New File'}</DialogTitle>
                         <DialogDescription>
@@ -114,7 +122,7 @@ export function FileDialog({
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant='outline' onClick={onClose}>
+                        <Button variant='outline' onClick={handleDialogClose}>
                             Cancel
                         </Button>
                         <Button onClick={onSave} disabled={isSaving || (!isEditMode && !selectedDatabase)}>
